@@ -1,0 +1,58 @@
+server:
+  port: ${SERVER_PORT:8083}
+
+spring:
+  application:
+    name: finance-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/kitchenledger}
+    username: ${SPRING_DATASOURCE_USERNAME:kl_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:kl_password}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 30000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        default_schema: public
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:kl_rabbit}
+    password: ${RABBITMQ_PASSWORD:kl_rabbit_pass}
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+inventory:
+  service-url: ${INVENTORY_SERVICE_URL:http://localhost:8082}
+
+internal:
+  service-secret: ${INTERNAL_SERVICE_SECRET:}
+
+rabbitmq:
+  exchange: kitchenledger.events
+  queues:
+    finance-service: finance-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.kitchenledger: INFO

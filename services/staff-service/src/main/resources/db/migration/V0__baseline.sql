@@ -1,0 +1,3 @@
+-- V0__baseline.sql
+-- Flyway baseline migration for staff-service.
+-- Actual schema is in V1__staff_schema.sql.

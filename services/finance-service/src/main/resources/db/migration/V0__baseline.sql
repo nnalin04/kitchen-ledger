@@ -1,0 +1,3 @@
+-- V0__baseline.sql
+-- Flyway baseline migration for finance-service.
+-- Actual schema is in V1__finance_schema.sql.

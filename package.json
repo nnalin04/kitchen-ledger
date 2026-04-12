@@ -1,0 +1,28 @@
+{
+  "name": "kitchenledger",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean",
+    "infra:up": "docker-compose -f infrastructure/docker-compose.yml up -d",
+    "infra:down": "docker-compose -f infrastructure/docker-compose.yml down",
+    "infra:logs": "docker-compose -f infrastructure/docker-compose.yml logs -f",
+    "health": "curl -s http://localhost:8080/health | jq ."
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  }
+}

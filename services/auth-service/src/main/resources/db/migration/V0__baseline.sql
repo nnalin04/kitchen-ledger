@@ -1,0 +1,4 @@
+-- V0__baseline.sql
+-- Flyway baseline migration for auth-service.
+-- This file marks the starting point; actual schema is in V1__auth_schema.sql.
+-- When baseline-on-migrate=true, Flyway will mark this as applied on an empty schema.

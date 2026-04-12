@@ -1,0 +1,3 @@
+-- V0__baseline.sql
+-- Flyway baseline migration for inventory-service.
+-- Actual schema is in V1__inventory_schema.sql.
