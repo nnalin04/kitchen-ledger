@@ -71,6 +71,11 @@ public class GatewayTrustFilter extends OncePerRequestFilter {
             request.setAttribute(ATTR_USER_ROLE, rawRole);
         }
 
-        filterChain.doFilter(request, response);
+        TenantContext.set(rawTenantId);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            TenantContext.clear();
+        }
     }
 }

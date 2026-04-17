@@ -68,6 +68,14 @@ public class GatewayTrustFilter extends OncePerRequestFilter {
             request.setAttribute(ATTR_USER_ROLE, rawRole);
         }
 
-        filterChain.doFilter(request, response);
+        // Populate thread-local so TenantRlsAspect can set the PostgreSQL session variable
+        // that activates RLS policies on all tenant-scoped tables.
+        TenantContext.set(rawTenantId);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            // Always clear — prevents context leakage when threads are reused by the pool.
+            TenantContext.clear();
+        }
     }
 }
