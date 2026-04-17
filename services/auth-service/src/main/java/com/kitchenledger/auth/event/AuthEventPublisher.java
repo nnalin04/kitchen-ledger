@@ -1,12 +1,18 @@
 package com.kitchenledger.auth.event;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kitchenledger.auth.model.Tenant;
 import com.kitchenledger.auth.model.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
@@ -18,7 +24,14 @@ public class AuthEventPublisher {
     private static final String EXCHANGE = "kitchenledger.events";
 
     private final RabbitTemplate rabbitTemplate;
+    private final OutboxEventRepository outboxEventRepository;
+    private final ObjectMapper objectMapper;
 
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
     public void publishUserRegistered(User user, Tenant tenant) {
         EventEnvelope envelope = EventEnvelope.builder()
                 .eventType("auth.user.registered")
@@ -32,9 +45,26 @@ public class AuthEventPublisher {
                 ))
                 .build();
 
-        publish("auth.user.registered", envelope);
+        rabbitTemplate.convertAndSend(EXCHANGE, "auth.user.registered", envelope);
+        log.debug("Published event auth.user.registered for tenant {}", tenant.getId());
     }
 
+    @Recover
+    public void recoverPublishUserRegistered(AmqpException ex, User user, Tenant tenant) {
+        log.error("CRITICAL: Event publish failed after 3 retries for key auth.user.registered. Saving to outbox.", ex);
+        saveToOutbox(tenant.getId(), "auth.user.registered", Map.of(
+                "user_id", user.getId().toString(),
+                "email", user.getEmail(),
+                "full_name", user.getFullName(),
+                "tenant_name", tenant.getRestaurantName()
+        ));
+    }
+
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
     public void publishTenantCreated(UUID tenantId) {
         EventEnvelope envelope = EventEnvelope.builder()
                 .eventType("auth.tenant.created")
@@ -43,9 +73,21 @@ public class AuthEventPublisher {
                 .payload(Map.of("tenant_id", tenantId.toString()))
                 .build();
 
-        publish("auth.tenant.created", envelope);
+        rabbitTemplate.convertAndSend(EXCHANGE, "auth.tenant.created", envelope);
+        log.debug("Published event auth.tenant.created for tenant {}", tenantId);
     }
 
+    @Recover
+    public void recoverPublishTenantCreated(AmqpException ex, UUID tenantId) {
+        log.error("CRITICAL: Event publish failed after 3 retries for key auth.tenant.created. Saving to outbox.", ex);
+        saveToOutbox(tenantId, "auth.tenant.created", Map.of("tenant_id", tenantId.toString()));
+    }
+
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
     public void publishUserInvited(User invitedUser, String inviteToken) {
         EventEnvelope envelope = EventEnvelope.builder()
                 .eventType("auth.user.invited")
@@ -59,16 +101,32 @@ public class AuthEventPublisher {
                 ))
                 .build();
 
-        publish("auth.user.invited", envelope);
+        rabbitTemplate.convertAndSend(EXCHANGE, "auth.user.invited", envelope);
+        log.debug("Published event auth.user.invited for tenant {}", invitedUser.getTenantId());
     }
 
-    private void publish(String routingKey, EventEnvelope envelope) {
+    @Recover
+    public void recoverPublishUserInvited(AmqpException ex, User invitedUser, String inviteToken) {
+        log.error("CRITICAL: Event publish failed after 3 retries for key auth.user.invited. Saving to outbox.", ex);
+        saveToOutbox(invitedUser.getTenantId(), "auth.user.invited", Map.of(
+                "user_id", invitedUser.getId().toString(),
+                "email", invitedUser.getEmail(),
+                "role", invitedUser.getRole().name(),
+                "invite_token", inviteToken
+        ));
+    }
+
+    private void saveToOutbox(UUID tenantId, String routingKey, Map<String, Object> payload) {
         try {
-            rabbitTemplate.convertAndSend(EXCHANGE, routingKey, envelope);
-            log.debug("Published event {} for tenant {}", envelope.getEventType(), envelope.getTenantId());
-        } catch (Exception e) {
-            // Log but don't fail the request — events are best-effort for now
-            log.error("Failed to publish event {}: {}", envelope.getEventType(), e.getMessage());
+            String json = objectMapper.writeValueAsString(payload);
+            outboxEventRepository.save(OutboxEvent.builder()
+                    .tenantId(tenantId)
+                    .routingKey(routingKey)
+                    .payload(json)
+                    .failedAt(Instant.now())
+                    .build());
+        } catch (Exception saveEx) {
+            log.error("FATAL: Could not save event to outbox either. Event LOST. Key={}", routingKey, saveEx);
         }
     }
 }
