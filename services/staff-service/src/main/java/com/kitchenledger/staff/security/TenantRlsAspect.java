@@ -43,6 +43,14 @@ public class TenantRlsAspect {
             .setParameter("tenantId", tenantId)
             .getSingleResult();
         }
+        String userId = TenantContext.getUserId();
+        if (userId != null) {
+            em.createNativeQuery(
+                "SELECT set_config('app.current_user_id', :userId, true)"
+            )
+            .setParameter("userId", userId)
+            .getSingleResult();
+        }
         return pjp.proceed();
     }
 }
