@@ -12,6 +12,8 @@ import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.Map;
 import java.util.UUID;
 
@@ -74,6 +76,65 @@ public class StaffEventPublisher {
                 "shift_id",    shiftId.toString(),
                 "employee_id", employeeId.toString(),
                 "shift_date",  shiftDate
+        ));
+    }
+
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public void publishEmployeeNoShow(UUID tenantId, UUID shiftId, UUID employeeId,
+                                      String employeeName, LocalDate shiftDate, LocalTime shiftStart) {
+        Map<String, Object> payload = Map.of(
+                "shift_id",       shiftId.toString(),
+                "employee_id",    employeeId.toString(),
+                "employee_name",  employeeName,
+                "shift_date",     shiftDate.toString(),
+                "shift_start",    shiftStart.toString()
+        );
+        publishEnvelope(tenantId, "staff.employee.noshow", payload);
+    }
+
+    @Recover
+    public void recoverPublishEmployeeNoShow(AmqpException ex, UUID tenantId, UUID shiftId,
+                                              UUID employeeId, String employeeName,
+                                              LocalDate shiftDate, LocalTime shiftStart) {
+        log.error("CRITICAL: Event publish failed after 3 retries for key staff.employee.noshow. Saving to outbox.", ex);
+        saveToOutbox(tenantId, "staff.employee.noshow", Map.of(
+                "shift_id",      shiftId.toString(),
+                "employee_id",   employeeId.toString(),
+                "employee_name", employeeName,
+                "shift_date",    shiftDate.toString(),
+                "shift_start",   shiftStart.toString()
+        ));
+    }
+
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public void publishOvertimeApproaching(UUID tenantId, UUID employeeId,
+                                           String employeeName, double hoursThisWeek) {
+        double hoursUntilOvertime = Math.max(0, 40.0 - hoursThisWeek);
+        Map<String, Object> payload = Map.of(
+                "employee_id",          employeeId.toString(),
+                "employee_name",        employeeName,
+                "hours_this_week",      String.valueOf(hoursThisWeek),
+                "hours_until_overtime", String.valueOf(hoursUntilOvertime)
+        );
+        publishEnvelope(tenantId, "staff.overtime.approaching", payload);
+    }
+
+    @Recover
+    public void recoverPublishOvertimeApproaching(AmqpException ex, UUID tenantId, UUID employeeId,
+                                                   String employeeName, double hoursThisWeek) {
+        log.error("CRITICAL: Event publish failed after 3 retries for key staff.overtime.approaching. Saving to outbox.", ex);
+        saveToOutbox(tenantId, "staff.overtime.approaching", Map.of(
+                "employee_id",     employeeId.toString(),
+                "employee_name",   employeeName,
+                "hours_this_week", String.valueOf(hoursThisWeek)
         ));
     }
 

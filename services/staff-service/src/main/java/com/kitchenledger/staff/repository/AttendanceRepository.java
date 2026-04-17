@@ -25,6 +25,9 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     /** Find open clock-in (no clock-out yet) for an employee. */
     Optional<Attendance> findByTenantIdAndEmployeeIdAndClockOutAtIsNull(UUID tenantId, UUID employeeId);
 
+    /** Used by no-show detection job: check if any attendance record is linked to a specific shift. */
+    boolean existsByShiftIdAndTenantId(UUID shiftId, UUID tenantId);
+
     @Query("""
         SELECT COALESCE(SUM(a.hoursWorked), 0)
         FROM Attendance a

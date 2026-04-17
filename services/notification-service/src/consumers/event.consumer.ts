@@ -19,8 +19,13 @@ const BINDINGS = [
   'inventory.price.alert',
   'finance.dsr.reconciled',
   'finance.payment.overdue',
+  'finance.expense.created',
+  'finance.cash.discrepancy',
   'report.generated',
   'staff.employee.hired',
+  'staff.employee.noshow',
+  'staff.overtime.approaching',
+  'inventory.receipt.confirmed',
 ];
 
 let connection: Connection | null = null;
@@ -202,6 +207,66 @@ async function handleEvent(
         channels: ['push'],
       });
       break;
+
+    case 'staff.employee.noshow':
+      await dispatch({
+        tenantId,
+        userId: null,
+        type: eventType,
+        priority: 'important',
+        title: 'Employee No-Show',
+        body: `${payload.employee_name} did not clock in for their ${payload.shift_start} shift on ${payload.shift_date}.`,
+        data: payload,
+        channels: ['push'],
+      });
+      break;
+
+    case 'staff.overtime.approaching':
+      await dispatch({
+        tenantId,
+        userId: null,
+        type: eventType,
+        priority: 'important',
+        title: 'Overtime Alert',
+        body: `${payload.employee_name} has worked ${payload.hours_this_week}h this week. Overtime in ${payload.hours_until_overtime}h.`,
+        data: payload,
+        channels: ['push'],
+      });
+      break;
+
+    case 'finance.expense.created':
+      // Audit log — no push notification by default; extend later for budget alerts
+      console.info('Expense created event received for tenant', tenantId);
+      break;
+
+    case 'inventory.receipt.confirmed':
+      await dispatch({
+        tenantId,
+        userId: null,
+        type: eventType,
+        priority: 'informational',
+        title: 'Delivery Confirmed',
+        body: `Stock receipt confirmed. Inventory has been updated.`,
+        data: payload,
+        channels: ['push'],
+      });
+      break;
+
+    case 'finance.cash.discrepancy': {
+      const direction = payload.variance_direction === 'SHORT' ? 'SHORT' : 'OVER';
+      const amount    = Math.abs(parseFloat(payload.variance ?? '0')).toFixed(2);
+      await dispatch({
+        tenantId,
+        userId: null,
+        type: eventType,
+        priority: 'critical',
+        title: `Cash ${direction} — ₹${amount}`,
+        body: `Today's cash count is ₹${amount} ${direction.toLowerCase()}. Immediate review required.`,
+        data: payload,
+        channels: ['push'],
+      });
+      break;
+    }
 
     default:
       console.warn('Unhandled event type:', eventType);
