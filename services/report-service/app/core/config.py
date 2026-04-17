@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # Internal service calls
     finance_service_url: str = "http://localhost:8083"
     inventory_service_url: str = "http://localhost:8082"
+    staff_service_url: str = "http://localhost:8088"
     internal_service_secret: str = ""
 
     # Supabase Storage

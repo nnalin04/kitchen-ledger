@@ -54,9 +54,11 @@ bind notification-service "auth.user.invited"
 bind notification-service "inventory.stock.low"
 bind notification-service "inventory.stock.expiring"
 bind notification-service "inventory.po.sent"
+bind notification-service "inventory.price.alert"
 bind notification-service "finance.dsr.reconciled"
 bind notification-service "finance.payment.overdue"
 bind notification-service "report.generated"
+bind notification-service "staff.employee.hired"
 
 # finance-service consumes:
 bind finance-service "auth.tenant.created"

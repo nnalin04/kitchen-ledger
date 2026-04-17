@@ -14,7 +14,7 @@ app = FastAPI(
 )
 
 
-# ── Exception handlers (Part 5B Error Handling Standards) ──────
+# ── Exception hierarchy ────────────────────────────────────────────────────
 
 class ServiceException(Exception):
     def __init__(self, code: str, message: str, status: int = 400):
@@ -33,6 +33,8 @@ class AccessDeniedException(ServiceException):
         super().__init__("FORBIDDEN", message, 403)
 
 
+# ── Exception handlers ─────────────────────────────────────────────────────
+
 @app.exception_handler(ServiceException)
 async def service_exception_handler(request: Request, exc: ServiceException):
     return JSONResponse(
@@ -46,17 +48,22 @@ async def generic_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled exception", exc_info=exc)
     return JSONResponse(
         status_code=500,
-        content={"success": False, "error": {"code": "INTERNAL_ERROR", "message": "An unexpected error occurred"}},
+        content={
+            "success": False,
+            "error": {"code": "INTERNAL_ERROR", "message": "An unexpected error occurred"},
+        },
     )
 
 
-# ── Health ─────────────────────────────────────────────────────
+# ── Health ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "report-service"}
 
 
-# ── Routers (registered here as they are implemented) ──────────
-# from app.routers import reports
-# app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
+# ── Routers ────────────────────────────────────────────────────────────────
+
+from app.routers.reports import router as reports_router  # noqa: E402
+
+app.include_router(reports_router, prefix="/api/v1/reports", tags=["reports"])

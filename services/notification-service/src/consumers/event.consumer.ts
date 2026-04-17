@@ -16,9 +16,11 @@ const BINDINGS = [
   'inventory.stock.low',
   'inventory.stock.expiring',
   'inventory.po.sent',
+  'inventory.price.alert',
   'finance.dsr.reconciled',
   'finance.payment.overdue',
   'report.generated',
+  'staff.employee.hired',
 ];
 
 let connection: Connection | null = null;
@@ -121,6 +123,32 @@ async function handleEvent(
       });
       break;
 
+    case 'inventory.po.sent':
+      await dispatch({
+        tenantId,
+        userId: null,
+        type: eventType,
+        priority: 'informational',
+        title: 'Purchase Order Sent',
+        body: `PO ${payload.po_number} sent via ${payload.sent_via} (total: ${payload.total_amount})`,
+        data: payload,
+        channels: ['push'],
+      });
+      break;
+
+    case 'inventory.price.alert':
+      await dispatch({
+        tenantId,
+        userId: null,
+        type: eventType,
+        priority: 'important',
+        title: 'Price Alert',
+        body: `${payload.item_name} price changed by ${payload.delta_percent}% → ${payload.new_price}`,
+        data: payload,
+        channels: ['push'],
+      });
+      break;
+
     case 'finance.payment.overdue':
       await dispatch({
         tenantId,
@@ -128,7 +156,8 @@ async function handleEvent(
         type: eventType,
         priority: 'critical',
         title: 'Payment Overdue',
-        body: `Payment to ${payload.vendor_name} is overdue (${payload.currency}${payload.amount})`,
+        // publisher sends vendor_id not vendor_name; fall back gracefully
+        body: `Payment (vendor: ${payload.vendor_id}) is overdue — ${payload.currency} ${payload.amount}`,
         data: payload,
         channels: ['push', 'email'],
       });
@@ -141,7 +170,21 @@ async function handleEvent(
         type: eventType,
         priority: 'informational',
         title: 'Daily Report Reconciled',
-        body: `Sales report for ${payload.date} reconciled. Net: ${payload.currency}${payload.net_sales}`,
+        // publisher sends report_date (not date); support both during rollout
+        body: `Sales report for ${payload.report_date ?? payload.date} reconciled. Net: ${payload.currency} ${payload.net_sales}`,
+        data: payload,
+        channels: ['push'],
+      });
+      break;
+
+    case 'staff.employee.hired':
+      await dispatch({
+        tenantId,
+        userId: null,
+        type: eventType,
+        priority: 'informational',
+        title: 'New Team Member',
+        body: `${payload.full_name} has been added as ${payload.role}. Complete their onboarding profile.`,
         data: payload,
         channels: ['push'],
       });

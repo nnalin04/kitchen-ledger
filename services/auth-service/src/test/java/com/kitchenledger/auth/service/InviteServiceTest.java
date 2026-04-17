@@ -44,7 +44,9 @@ class InviteServiceTest {
     @BeforeEach
     void setUp() {
         tenantId = UUID.randomUUID();
-        when(passwordService.hash(anyString())).thenReturn("$2a$12$placeholder");
+        // lenient: only needed by tests that reach the hash call;
+        // tests that throw early would fail strict-stubbing otherwise
+        lenient().when(passwordService.hash(anyString())).thenReturn("$2a$12$placeholder");
     }
 
     @Test

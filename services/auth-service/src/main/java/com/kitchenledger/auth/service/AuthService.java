@@ -249,7 +249,7 @@ public class AuthService {
         return slug;
     }
 
-    static String sha256Hex(String input) {
+    public static String sha256Hex(String input) {
         try {
             byte[] hash = MessageDigest.getInstance("SHA-256")
                     .digest(input.getBytes(StandardCharsets.UTF_8));

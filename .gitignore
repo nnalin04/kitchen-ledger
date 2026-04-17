@@ -35,3 +35,20 @@ CLAUDE.md
 
 # Turborepo
 .turbo/
+
+# Java / Maven build output
+target/
+*.class
+*.jar
+!**/test/**/*.jar
+
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# Working documents — kept local, not tracked in git
+docs/BACKEND_FIXES.md
