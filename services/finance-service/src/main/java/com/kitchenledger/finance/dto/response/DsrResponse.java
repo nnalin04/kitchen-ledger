@@ -28,6 +28,9 @@ public class DsrResponse {
     private BigDecimal serviceChargeCollected;
     private BigDecimal costOfGoodsSold;
     private String notes;
+    private BigDecimal cashCountActual;
+    private BigDecimal cashOverShort;
+    private boolean requiresInvestigation;
     private boolean finalized;
     private UUID createdBy;
     private UUID approvedBy;
@@ -52,6 +55,9 @@ public class DsrResponse {
                 .serviceChargeCollected(d.getServiceChargeCollected())
                 .costOfGoodsSold(d.getCostOfGoodsSold())
                 .notes(d.getNotes())
+                .cashCountActual(d.getCashCountActual())
+                .cashOverShort(d.getCashOverShort())
+                .requiresInvestigation(d.isRequiresInvestigation())
                 .finalized(d.isFinalized())
                 .createdBy(d.getCreatedBy())
                 .approvedBy(d.getApprovedBy())

@@ -1,6 +1,7 @@
 package com.kitchenledger.finance.controller;
 
 import com.kitchenledger.finance.dto.request.CreateDsrRequest;
+import com.kitchenledger.finance.dto.request.ReconcileCashRequest;
 import com.kitchenledger.finance.dto.response.DsrResponse;
 import com.kitchenledger.finance.security.GatewayTrustFilter;
 import com.kitchenledger.finance.security.RequiresRole;
@@ -82,6 +83,15 @@ public class DailySalesReportController {
     @RequiresRole({"owner", "manager"})
     public ResponseEntity<DsrResponse> finalize(HttpServletRequest req, @PathVariable UUID id) {
         return ResponseEntity.ok(DsrResponse.from(dsrService.finalize(tenantId(req), id, userId(req))));
+    }
+
+    @PostMapping("/{id}/reconcile")
+    @RequiresRole({"owner", "manager"})
+    public ResponseEntity<DsrResponse> reconcile(HttpServletRequest req,
+                                                  @PathVariable UUID id,
+                                                  @Valid @RequestBody ReconcileCashRequest body) {
+        return ResponseEntity.ok(DsrResponse.from(
+                dsrService.reconcile(tenantId(req), id, body.getActualCash())));
     }
 
     private UUID tenantId(HttpServletRequest req) {

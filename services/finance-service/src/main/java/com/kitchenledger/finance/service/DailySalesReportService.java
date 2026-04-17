@@ -22,6 +22,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DailySalesReportService {
 
+    /** Fire a cash discrepancy event when variance exceeds this amount (INR). */
+    private static final BigDecimal CASH_DISCREPANCY_THRESHOLD = new BigDecimal("10.00");
+
     private final DailySalesReportRepository dsrRepository;
     private final FinanceEventPublisher eventPublisher;
 
@@ -112,5 +115,30 @@ public class DailySalesReportService {
         DailySalesReport saved = dsrRepository.save(dsr);
         eventPublisher.publishDsrReconciled(tenantId, saved);
         return saved;
+    }
+
+    /**
+     * Record the physical cash count for the day and check for discrepancies.
+     * Expected cash = cashSales (POS-recorded).
+     * Fires {@code finance.cash.discrepancy} when |variance| > {@code CASH_DISCREPANCY_THRESHOLD}.
+     */
+    @Transactional
+    public DailySalesReport reconcile(UUID tenantId, UUID id, BigDecimal actualCash) {
+        DailySalesReport dsr = getById(tenantId, id);
+
+        BigDecimal expectedCash = dsr.getCashSales();
+        BigDecimal variance     = actualCash.subtract(expectedCash);
+
+        dsr.setCashCountActual(actualCash);
+        dsr.setCashOverShort(variance);
+
+        if (variance.abs().compareTo(CASH_DISCREPANCY_THRESHOLD) > 0) {
+            dsr.setRequiresInvestigation(true);
+            DailySalesReport saved = dsrRepository.save(dsr);
+            eventPublisher.publishCashDiscrepancy(saved, expectedCash, actualCash, variance);
+            return saved;
+        }
+
+        return dsrRepository.save(dsr);
     }
 }

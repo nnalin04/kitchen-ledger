@@ -14,6 +14,7 @@ import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -83,6 +84,43 @@ public class FinanceEventPublisher {
                 "net_sales",     dsr.getNetSales() != null ? dsr.getNetSales().toPlainString() : "0",
                 "covers_count",  String.valueOf(dsr.getCoversCount()),
                 "currency",      "INR"
+        ));
+    }
+
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public void publishCashDiscrepancy(DailySalesReport dsr, BigDecimal expectedCash,
+                                       BigDecimal actualCash, BigDecimal variance) {
+        String direction = variance.compareTo(BigDecimal.ZERO) > 0 ? "OVER" : "SHORT";
+        Map<String, Object> payload = Map.of(
+                "dsr_id",             dsr.getId().toString(),
+                "report_date",        dsr.getReportDate().toString(),
+                "expected_cash",      expectedCash.toPlainString(),
+                "actual_cash",        actualCash.toPlainString(),
+                "variance",           variance.toPlainString(),
+                "variance_direction", direction,
+                "currency",           "INR"
+        );
+        publishEnvelope(dsr.getTenantId(), "finance.cash.discrepancy", payload);
+    }
+
+    @Recover
+    public void recoverPublishCashDiscrepancy(AmqpException ex, DailySalesReport dsr,
+                                              BigDecimal expectedCash, BigDecimal actualCash,
+                                              BigDecimal variance) {
+        log.error("CRITICAL: Event publish failed after 3 retries for key finance.cash.discrepancy. Saving to outbox.", ex);
+        String direction = variance.compareTo(BigDecimal.ZERO) > 0 ? "OVER" : "SHORT";
+        saveToOutbox(dsr.getTenantId(), "finance.cash.discrepancy", Map.of(
+                "dsr_id",             dsr.getId().toString(),
+                "report_date",        dsr.getReportDate().toString(),
+                "expected_cash",      expectedCash.toPlainString(),
+                "actual_cash",        actualCash.toPlainString(),
+                "variance",           variance.toPlainString(),
+                "variance_direction", direction,
+                "currency",           "INR"
         ));
     }
 

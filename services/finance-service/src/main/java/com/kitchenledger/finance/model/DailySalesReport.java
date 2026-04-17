@@ -73,6 +73,18 @@ public class DailySalesReport {
     @Column(name = "notes")
     private String notes;
 
+    /** Physical cash counted by the manager at end of day. */
+    @Column(name = "cash_count_actual", precision = 12, scale = 2)
+    private BigDecimal cashCountActual;
+
+    /** Variance = cash_count_actual − cash_sales. Positive = over, negative = short. */
+    @Column(name = "cash_over_short", precision = 12, scale = 2)
+    private BigDecimal cashOverShort;
+
+    @Column(name = "requires_investigation", nullable = false)
+    @Builder.Default
+    private boolean requiresInvestigation = false;
+
     @Column(name = "is_finalized", nullable = false)
     @Builder.Default
     private boolean finalized = false;
