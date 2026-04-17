@@ -3,13 +3,19 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { redisClient } from '../redis';
 
-const PUBLIC_ROUTES = [
+// A route entry can be either a plain path string (any HTTP method is allowed)
+// or an object restricting which methods bypass JWT verification.
+type PublicRoute = string | { path: string; methods: string[] };
+
+const PUBLIC_ROUTES: PublicRoute[] = [
   '/api/auth/register',
   '/api/auth/login',
   '/api/auth/refresh',
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
   '/api/auth/verify-email',
+  // Accept-invite is POST only: GET/PUT/etc. still require a valid JWT.
+  { path: '/api/auth/users/accept-invite', methods: ['POST'] },
   '/health',
 ];
 
@@ -27,9 +33,15 @@ export async function authMiddleware(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  const path = request.url.split('?')[0];
+  const path   = request.url.split('?')[0];
+  const method = (request.method ?? 'GET').toUpperCase();
 
-  if (PUBLIC_ROUTES.some(r => path.startsWith(r))) return;
+  const isPublic = PUBLIC_ROUTES.some(r =>
+    typeof r === 'string'
+      ? path.startsWith(r)
+      : path.startsWith(r.path) && r.methods.includes(method)
+  );
+  if (isPublic) return;
 
   const authHeader = request.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {

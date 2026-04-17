@@ -19,8 +19,10 @@ vi.mock('../../config', () => ({
 }));
 
 // ── Mock Redis client ─────────────────────────────────────────────────────────
+// vi.hoisted() ensures the mock fn is available before vi.mock() factories run
+// (vi.mock calls are hoisted to the top of the file by Vitest's transform).
 
-const mockRedisGet = vi.fn();
+const mockRedisGet = vi.hoisted(() => vi.fn());
 
 vi.mock('../../redis', () => ({
   redisClient: { get: mockRedisGet },
@@ -36,9 +38,10 @@ import jwt                           from 'jsonwebtoken';
 
 type Headers = Record<string, string | undefined>;
 
-function makeRequest(url: string, headers: Headers = {}): any {
+function makeRequest(url: string, headers: Headers = {}, method = 'GET'): any {
   return {
     url,
+    method,
     headers: { ...headers },
   };
 }
@@ -116,6 +119,21 @@ describe('authMiddleware', () => {
       const reply = makeReply();
       await authMiddleware(req, reply);
       expect(replyCode).toBeUndefined();
+    });
+
+    it('allows POST /api/auth/users/accept-invite without a token', async () => {
+      const req   = makeRequest('/api/auth/users/accept-invite', {}, 'POST');
+      const reply = makeReply();
+      await authMiddleware(req, reply);
+      expect(replyCode).toBeUndefined();
+    });
+
+    it('requires JWT for GET /api/auth/users/accept-invite', async () => {
+      const req   = makeRequest('/api/auth/users/accept-invite', {}, 'GET');
+      const reply = makeReply();
+      await authMiddleware(req, reply);
+      expect(replyCode).toBe(401);
+      expect((replyBody as any).error.code).toBe('MISSING_TOKEN');
     });
   });
 
