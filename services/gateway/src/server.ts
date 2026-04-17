@@ -36,6 +36,35 @@ async function bootstrap(): Promise<void> {
     },
   });
 
+  // Stricter IP-based rate limits for sensitive auth endpoints.
+  // These run BEFORE the global rate limit check and return 429 early
+  // so brute-force attacks are throttled more aggressively.
+  const authRateLimits: Record<string, number> = {
+    '/api/auth/login':           10,
+    '/api/auth/register':         5,
+    '/api/auth/forgot-password':  3,
+  };
+
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.method !== 'POST') return;
+    const limit = authRateLimits[req.url?.split('?')[0] ?? ''];
+    if (limit == null) return;
+
+    const key = `rl:auth:${req.url.split('?')[0].replaceAll('/', ':')}:${req.ip}`;
+    const count = await redisClient.incr(key);
+    if (count === 1) await redisClient.expire(key, 60);
+
+    if (count > limit) {
+      return reply.code(429).send({
+        success: false,
+        error: {
+          code: 'TOO_MANY_REQUESTS',
+          message: 'Too many authentication attempts. Please wait 1 minute.',
+        },
+      });
+    }
+  });
+
   // Error handler — standardized API response format
   app.setErrorHandler((error, _req, reply) => {
     app.log.error(error);

@@ -5,6 +5,7 @@ import com.kitchenledger.auth.dto.response.AuthResponse;
 import com.kitchenledger.auth.dto.response.TenantResponse;
 import com.kitchenledger.auth.dto.response.UserResponse;
 import com.kitchenledger.auth.event.AuthEventPublisher;
+import com.kitchenledger.auth.exception.AccountLockedException;
 import com.kitchenledger.auth.exception.ConflictException;
 import com.kitchenledger.auth.exception.ResourceNotFoundException;
 import com.kitchenledger.auth.exception.ValidationException;
@@ -20,6 +21,7 @@ import com.kitchenledger.auth.security.PasswordService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,11 +32,15 @@ import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class AuthService {
+
+    private static final int  LOGIN_MAX_FAILURES  = 5;
+    private static final long LOGIN_LOCK_SECONDS   = 900L; // 15 minutes
 
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
@@ -43,6 +49,7 @@ public class AuthService {
     private final PasswordService passwordService;
     private final AuthEventPublisher eventPublisher;
     private final AccountSeedService accountSeedService;
+    private final StringRedisTemplate redis;
 
     @Value("${jwt.refresh-token-expiry-days:30}")
     private long refreshTokenExpiryDays;
@@ -109,9 +116,23 @@ public class AuthService {
 
     /**
      * Login with email + password. Email is matched against the tenant that owns that email.
+     * Progressive lockout: after 5 consecutive failures the account is locked for 15 minutes.
      */
     @Transactional
     public AuthResponse login(LoginRequest req, String ipAddress, String userAgent) {
+        String lockKey    = "login:lock:"     + req.getEmail().toLowerCase();
+        String failureKey = "login:failures:" + req.getEmail().toLowerCase();
+
+        // Check if account is currently locked
+        String locked = redis.opsForValue().get(lockKey);
+        if (locked != null) {
+            Long ttl = redis.getExpire(lockKey, TimeUnit.SECONDS);
+            long remaining = ttl != null && ttl > 0 ? ttl / 60 : 0;
+            throw new AccountLockedException(
+                "Account temporarily locked due to too many failed attempts. " +
+                "Try again in " + remaining + " minute(s).");
+        }
+
         // Find tenant by email first (tenants.email is unique)
         Tenant tenant = tenantRepository.findByEmail(req.getEmail().toLowerCase())
                 .orElseThrow(() -> new ValidationException("Invalid email or password"));
@@ -125,8 +146,21 @@ public class AuthService {
         }
 
         if (!passwordService.matches(req.getPassword(), user.getHashedPassword())) {
+            Long failures = redis.opsForValue().increment(failureKey);
+            if (failures != null && failures == 1) {
+                redis.expire(failureKey, LOGIN_LOCK_SECONDS, TimeUnit.SECONDS);
+            }
+            if (failures != null && failures >= LOGIN_MAX_FAILURES) {
+                redis.opsForValue().set(lockKey, "1", LOGIN_LOCK_SECONDS, TimeUnit.SECONDS);
+                redis.delete(failureKey);
+                log.warn("Account locked after {} failed attempts: {}", LOGIN_MAX_FAILURES, req.getEmail());
+            }
             throw new ValidationException("Invalid email or password");
         }
+
+        // Successful login — clear failure counter
+        redis.delete(failureKey);
+        redis.delete(lockKey);
 
         // Update last login
         user.setLastLoginAt(Instant.now());
