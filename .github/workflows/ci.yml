@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+
+jobs:
+  # ── Java services (Spring Boot + Testcontainers) ──────────────────────────
+  # Testcontainers spins up its own PostgreSQL/RabbitMQ/Redis containers
+  # via Docker — no separate service blocks needed.
+  test-java:
+    name: Test ${{ matrix.service }} (Java)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth-service, inventory-service, finance-service, staff-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run tests
+        working-directory: services/${{ matrix.service }}
+        run: mvn test --batch-mode
+        env:
+          # Testcontainers uses the Docker socket — RYUK disabled for reliability in CI
+          TESTCONTAINERS_RYUK_DISABLED: 'true'
+          INTERNAL_SERVICE_SECRET: test-internal-secret-for-ci
+          JWT_PUBLIC_KEY_BASE64: ${{ secrets.JWT_PUBLIC_KEY_BASE64_TEST }}
+
+  # ── Python services ───────────────────────────────────────────────────────
+  test-python:
+    name: Test ${{ matrix.service }} (Python)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [ai-service, report-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: services/${{ matrix.service }}/requirements.txt
+
+      - name: Install dependencies
+        working-directory: services/${{ matrix.service }}
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: services/${{ matrix.service }}
+        run: pytest --tb=short
+        env:
+          DATABASE_URL: postgresql://kl_user:kl_password@localhost:5432/kitchenledger_test
+          REDIS_URL: redis://localhost:6379
+          OPENAI_API_KEY: test-key
+          MINDEE_API_KEY: test-key
+          SUPABASE_URL: http://localhost:54321
+          SUPABASE_SERVICE_KEY: test-key
+          SUPABASE_STORAGE_URL: http://localhost:54321/storage/v1
+
+  # ── Node.js services ──────────────────────────────────────────────────────
+  test-node:
+    name: Test ${{ matrix.service }} (Node)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [gateway, notification-service, file-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: services/${{ matrix.service }}
+        run: npm ci
+
+      - name: Run tests
+        working-directory: services/${{ matrix.service }}
+        run: npm test
+
+  # ── Lint ──────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint --if-present
