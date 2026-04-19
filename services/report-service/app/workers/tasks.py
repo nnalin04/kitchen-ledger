@@ -56,13 +56,35 @@ def _db_conn():
     return psycopg2.connect(settings.database_url)
 
 
-def _set_status(job_id: str, status: str, output_url: str | None = None) -> None:
+def _set_status(
+    job_id: str,
+    status: str,
+    output_url: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    terminal = status in ("completed", "failed")
     with _db_conn() as conn:
         with conn.cursor() as cur:
-            if output_url:
+            if output_url and terminal:
                 cur.execute(
-                    "UPDATE report_jobs SET status=%s, output_url=%s, updated_at=NOW() WHERE id=%s",
+                    """UPDATE report_jobs
+                       SET status=%s, output_url=%s, completed_at=NOW(), updated_at=NOW()
+                       WHERE id=%s""",
                     (status, output_url, job_id),
+                )
+            elif terminal and error_message:
+                cur.execute(
+                    """UPDATE report_jobs
+                       SET status=%s, error_message=%s, completed_at=NOW(), updated_at=NOW()
+                       WHERE id=%s""",
+                    (status, error_message, job_id),
+                )
+            elif terminal:
+                cur.execute(
+                    """UPDATE report_jobs
+                       SET status=%s, completed_at=NOW(), updated_at=NOW()
+                       WHERE id=%s""",
+                    (status, job_id),
                 )
             else:
                 cur.execute(
@@ -178,6 +200,6 @@ def generate_report(job_id: str, report_type: str, params: dict, tenant_id: str)
     except Exception as exc:
         logger.error("generate_report: failed job=%s error=%s", job_id, exc, exc_info=True)
         try:
-            _set_status(job_id, "failed")
+            _set_status(job_id, "failed", error_message=str(exc)[:500])
         except Exception:
             pass  # DB might be unreachable; best effort

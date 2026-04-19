@@ -1,8 +1,8 @@
 from __future__ import annotations
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ── P&L ───────────────────────────────────────────────────────────────────
@@ -65,3 +65,36 @@ class StaffHoursReport(BaseModel):
     to_date: date
     total_hours: Decimal
     entries: list[StaffHourEntry]
+
+
+# ── Async report job ───────────────────────────────────────────────────────
+
+VALID_REPORT_TYPES = {"pnl", "waste", "expenses", "staff-hours"}
+
+
+class ReportJobRequest(BaseModel):
+    report_type: str = Field(
+        ...,
+        description="One of: pnl, waste, expenses, staff-hours",
+    )
+    parameters: dict[str, str] = Field(
+        default_factory=dict,
+        description="Report parameters (e.g. {from: '2024-01-01', to: '2024-01-31'})",
+    )
+
+
+class ReportJobResponse(BaseModel):
+    job_id: str
+    status: str
+    report_type: str
+    created_at: datetime
+    completed_at: datetime | None = None
+    result_url: str | None = None
+    error_message: str | None = None
+    poll_url: str | None = None
+
+
+class ReportJobListResponse(BaseModel):
+    jobs: list[ReportJobResponse]
+    limit: int
+    offset: int

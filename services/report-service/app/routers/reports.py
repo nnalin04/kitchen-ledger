@@ -1,16 +1,23 @@
 """
 Report endpoints — aggregate data from finance, inventory, and staff services
 via internal HTTP calls and return structured summaries.
+
+Also exposes async job submission endpoints (POST /jobs, GET /jobs/{id}, GET /jobs)
+that submit heavy report generation to Celery workers and allow polling.
 """
 from __future__ import annotations
+import uuid
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.database import get_db
 from app.core.http_client import get_json
 from app.main import ServiceException
 from app.schemas.reports import (
@@ -21,6 +28,10 @@ from app.schemas.reports import (
     ExpenseCategoryBreakdown,
     StaffHoursReport,
     StaffHourEntry,
+    ReportJobRequest,
+    ReportJobResponse,
+    ReportJobListResponse,
+    VALID_REPORT_TYPES,
 )
 
 router = APIRouter()
@@ -262,3 +273,122 @@ async def staff_hours_report(
         total_hours=total_hours.quantize(TWO, rounding=ROUND_HALF_UP),
         entries=entries,
     )
+
+
+# ── Async report jobs ──────────────────────────────────────────────────────
+
+def _row_to_job_response(row: Any) -> ReportJobResponse:
+    return ReportJobResponse(
+        job_id=str(row.id),
+        status=row.status,
+        report_type=row.report_type,
+        created_at=row.created_at,
+        completed_at=row.completed_at,
+        result_url=row.output_url,
+        error_message=row.error_message,
+    )
+
+
+@router.post("/jobs", status_code=202, response_model=ReportJobResponse)
+async def submit_report_job(
+    body: ReportJobRequest,
+    tenant_id: str = Header(..., alias="x-tenant-id"),
+    user_id: str = Header(..., alias="x-user-id"),
+    db: AsyncSession = Depends(get_db),
+) -> ReportJobResponse:
+    """
+    Submit an async report generation job.
+    Returns 202 with job_id for polling.
+    Poll GET /jobs/{job_id} until status is 'completed' or 'failed'.
+    """
+    if body.report_type not in VALID_REPORT_TYPES:
+        raise ServiceException(
+            "INVALID_REPORT_TYPE",
+            f"report_type must be one of: {', '.join(sorted(VALID_REPORT_TYPES))}",
+        )
+
+    job_id = str(uuid.uuid4())
+
+    await db.execute(
+        text("""
+            INSERT INTO report_jobs (id, tenant_id, report_type, status, params, created_by)
+            VALUES (:id, :tenant_id, :report_type, 'pending', :params::jsonb, :created_by)
+        """),
+        {
+            "id":          job_id,
+            "tenant_id":   tenant_id,
+            "report_type": body.report_type,
+            "params":      _json_str(body.parameters),
+            "created_by":  user_id,
+        },
+    )
+    await db.commit()
+
+    # Submit to Celery worker (non-blocking)
+    from app.workers.tasks import generate_report  # late import avoids circular deps
+    generate_report.delay(job_id, body.report_type, body.parameters, tenant_id)
+
+    row = await db.execute(
+        text("SELECT * FROM report_jobs WHERE id = :id"),
+        {"id": job_id},
+    )
+    job = row.fetchone()
+
+    response = _row_to_job_response(job)
+    response.poll_url = f"/api/v1/reports/jobs/{job_id}"
+    return response
+
+
+@router.get("/jobs/{job_id}", response_model=ReportJobResponse)
+async def get_report_job(
+    job_id: str,
+    tenant_id: str = Header(..., alias="x-tenant-id"),
+    db: AsyncSession = Depends(get_db),
+) -> ReportJobResponse:
+    """Poll job status.  When completed, result_url contains a signed download URL."""
+    result = await db.execute(
+        text("""
+            SELECT id, status, report_type, created_at, completed_at,
+                   output_url, error_message
+            FROM report_jobs
+            WHERE id = :id
+              AND tenant_id = :tenant_id
+        """),
+        {"id": job_id, "tenant_id": tenant_id},
+    )
+    job = result.fetchone()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return _row_to_job_response(job)
+
+
+@router.get("/jobs", response_model=ReportJobListResponse)
+async def list_report_jobs(
+    tenant_id: str = Header(..., alias="x-tenant-id"),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+) -> ReportJobListResponse:
+    """List recent report jobs for this tenant, newest first."""
+    result = await db.execute(
+        text("""
+            SELECT id, status, report_type, created_at, completed_at,
+                   output_url, error_message
+            FROM report_jobs
+            WHERE tenant_id = :tenant_id
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :offset
+        """),
+        {"tenant_id": tenant_id, "limit": limit, "offset": offset},
+    )
+    rows = result.fetchall()
+    return ReportJobListResponse(
+        jobs=[_row_to_job_response(r) for r in rows],
+        limit=limit,
+        offset=offset,
+    )
+
+
+def _json_str(data: dict) -> str:
+    import json
+    return json.dumps(data)
