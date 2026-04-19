@@ -22,6 +22,11 @@ const configSchema = z.object({
 
   // Internal secret for service-to-service calls
   INTERNAL_SERVICE_SECRET: z.string().min(1),
+
+  // Comma-separated list of allowed CORS origins
+  // Example: https://app.kitchenledger.app,https://staging.kitchenledger.app
+  // Defaults to localhost for local development
+  ALLOWED_ORIGINS: z.string().default('http://localhost:3000,http://localhost:8081'),
 });
 
 const result = configSchema.safeParse(process.env);

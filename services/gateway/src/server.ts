@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { config } from './config';
@@ -18,9 +18,37 @@ const app = Fastify({
 });
 
 async function bootstrap(): Promise<void> {
-  // CORS
+  // ── Raw body capture ───────────────────────────────────────────────────────
+  // Captures ALL request bodies as raw Buffer so they can be forwarded to
+  // upstream services verbatim (JSON, multipart, binary — all preserved).
+  // Registered before any plugins or routes that might consume the body.
+  const captureRawBody = (
+    _req: FastifyRequest,
+    body: Buffer,
+    done: (err: Error | null, body: Buffer) => void
+  ) => done(null, body);
+
+  app.addContentTypeParser('application/json', { parseAs: 'buffer' }, captureRawBody);
+  app.addContentTypeParser('text/plain', { parseAs: 'buffer' }, captureRawBody);
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'buffer' }, captureRawBody);
+  app.addContentTypeParser('*', { parseAs: 'buffer' }, captureRawBody);
+
+  // ── CORS — allowlist-based (H-11) ─────────────────────────────────────────
+  // Reads allowed origins from ALLOWED_ORIGINS env var (comma-separated).
+  // Server-to-server calls (no Origin header) are always allowed.
+  const allowedOrigins = config.ALLOWED_ORIGINS
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   await app.register(cors, {
-    origin: config.NODE_ENV === 'production' ? false : true,
+    origin: (origin, callback) => {
+      // Allow requests with no Origin header (server-to-server / curl / Postman)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error('CORS: Origin not allowed'), false);
+    },
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
