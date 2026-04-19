@@ -12,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +34,12 @@ public class UserService {
                 .stream()
                 .map(UserResponse::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<UserResponse> listByTenant(UUID tenantId, Pageable pageable) {
+        return userRepository.findByTenantIdAndDeletedAtIsNull(tenantId, pageable)
+                .map(UserResponse::from);
     }
 
     @Transactional

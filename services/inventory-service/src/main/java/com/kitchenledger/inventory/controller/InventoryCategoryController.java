@@ -13,8 +13,10 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 @RestController
 @RequestMapping("/api/v1/inventory/categories")
@@ -24,8 +26,15 @@ public class InventoryCategoryController {
     private final InventoryCategoryService categoryService;
 
     @GetMapping
-    public ResponseEntity<List<InventoryCategory>> list(HttpServletRequest req) {
-        return ResponseEntity.ok(categoryService.listByTenant(tenantId(req)));
+    public ResponseEntity<Page<InventoryCategory>> list(
+            HttpServletRequest req,
+            @RequestParam(defaultValue = "0")          int page,
+            @RequestParam(defaultValue = "20")         int size,
+            @RequestParam(defaultValue = "sortOrder")  String sortBy,
+            @RequestParam(defaultValue = "asc")        String sortDir) {
+        var pageable = PageRequest.of(page, Math.min(size, 100),
+                Sort.by(Sort.Direction.fromString(sortDir), sortBy));
+        return ResponseEntity.ok(categoryService.listByTenant(tenantId(req), pageable));
     }
 
     @GetMapping("/{id}")

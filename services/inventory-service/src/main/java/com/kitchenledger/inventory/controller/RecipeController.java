@@ -12,8 +12,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 @RestController
 @RequestMapping("/api/v1/inventory/recipes")
@@ -23,10 +25,15 @@ public class RecipeController {
     private final RecipeService recipeService;
 
     @GetMapping
-    public ResponseEntity<List<RecipeResponse>> list(HttpServletRequest req) {
-        List<RecipeResponse> recipes = recipeService.listByTenant(tenantId(req))
-                .stream().map(RecipeResponse::from).toList();
-        return ResponseEntity.ok(recipes);
+    public ResponseEntity<Page<RecipeResponse>> list(
+            HttpServletRequest req,
+            @RequestParam(defaultValue = "0")    int page,
+            @RequestParam(defaultValue = "20")   int size,
+            @RequestParam(defaultValue = "name") String sortBy,
+            @RequestParam(defaultValue = "asc")  String sortDir) {
+        var pageable = PageRequest.of(page, Math.min(size, 100),
+                Sort.by(Sort.Direction.fromString(sortDir), sortBy));
+        return ResponseEntity.ok(recipeService.listByTenant(tenantId(req), pageable));
     }
 
     @GetMapping("/{id}")

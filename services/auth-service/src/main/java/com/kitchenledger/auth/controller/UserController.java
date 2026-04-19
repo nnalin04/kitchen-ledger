@@ -11,10 +11,15 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 @RestController
 @RequestMapping("/api/auth/users")
@@ -26,10 +31,16 @@ public class UserController {
 
     @GetMapping
     @RequiresRole({"owner", "manager"})
-    public ResponseEntity<Map<String, Object>> listUsers(HttpServletRequest request) {
+    public ResponseEntity<Page<UserResponse>> listUsers(
+            HttpServletRequest request,
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "fullName") String sortBy,
+            @RequestParam(defaultValue = "asc") String sortDir) {
         UUID tenantId = extractTenantId(request);
-        List<UserResponse> users = userService.listByTenant(tenantId);
-        return ResponseEntity.ok(Map.of("success", true, "data", users));
+        var pageable = PageRequest.of(page, Math.min(size, 100),
+                Sort.by(Sort.Direction.fromString(sortDir), sortBy));
+        return ResponseEntity.ok(userService.listByTenant(tenantId, pageable));
     }
 
     @PostMapping("/invite")

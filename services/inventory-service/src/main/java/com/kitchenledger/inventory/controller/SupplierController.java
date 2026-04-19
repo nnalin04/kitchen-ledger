@@ -12,8 +12,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 @RestController
 @RequestMapping("/api/v1/inventory/suppliers")
@@ -23,10 +25,16 @@ public class SupplierController {
     private final SupplierService supplierService;
 
     @GetMapping
-    public ResponseEntity<List<SupplierResponse>> list(HttpServletRequest req) {
-        List<SupplierResponse> suppliers = supplierService.listByTenant(tenantId(req))
-                .stream().map(SupplierResponse::from).toList();
-        return ResponseEntity.ok(suppliers);
+    public ResponseEntity<Page<SupplierResponse>> list(
+            HttpServletRequest req,
+            @RequestParam(defaultValue = "0")    int page,
+            @RequestParam(defaultValue = "20")   int size,
+            @RequestParam(defaultValue = "name") String sortBy,
+            @RequestParam(defaultValue = "asc")  String sortDir) {
+        var pageable = PageRequest.of(page, Math.min(size, 100),
+                Sort.by(Sort.Direction.fromString(sortDir), sortBy));
+        return ResponseEntity.ok(
+                supplierService.listByTenant(tenantId(req), pageable).map(SupplierResponse::from));
     }
 
     @GetMapping("/{id}")

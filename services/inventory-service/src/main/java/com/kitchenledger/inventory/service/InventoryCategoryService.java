@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +23,11 @@ public class InventoryCategoryService {
     @Transactional(readOnly = true)
     public List<InventoryCategory> listByTenant(UUID tenantId) {
         return categoryRepository.findByTenantIdAndDeletedAtIsNullOrderBySortOrderAsc(tenantId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<InventoryCategory> listByTenant(UUID tenantId, Pageable pageable) {
+        return categoryRepository.findByTenantIdAndDeletedAtIsNull(tenantId, pageable);
     }
 
     @Transactional(readOnly = true)

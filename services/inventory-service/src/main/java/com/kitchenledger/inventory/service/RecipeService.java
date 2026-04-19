@@ -1,6 +1,7 @@
 package com.kitchenledger.inventory.service;
 
 import com.kitchenledger.inventory.dto.request.CreateRecipeRequest;
+import com.kitchenledger.inventory.dto.response.RecipeResponse;
 import com.kitchenledger.inventory.exception.ConflictException;
 import com.kitchenledger.inventory.exception.ResourceNotFoundException;
 import com.kitchenledger.inventory.model.InventoryItem;
@@ -17,6 +18,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +31,12 @@ public class RecipeService {
     @Transactional(readOnly = true)
     public List<Recipe> listByTenant(UUID tenantId) {
         return recipeRepository.findByTenantIdAndDeletedAtIsNull(tenantId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<RecipeResponse> listByTenant(UUID tenantId, Pageable pageable) {
+        return recipeRepository.findByTenantIdAndDeletedAtIsNull(tenantId, pageable)
+                .map(RecipeResponse::from);
     }
 
     @Transactional(readOnly = true)

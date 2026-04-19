@@ -12,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +27,13 @@ public class EmployeeService {
         return activeOnly
                 ? employeeRepository.findByTenantIdAndActiveTrueAndDeletedAtIsNull(tenantId)
                 : employeeRepository.findByTenantIdAndDeletedAtIsNullOrderByLastNameAsc(tenantId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Employee> listByTenant(UUID tenantId, boolean activeOnly, Pageable pageable) {
+        return activeOnly
+                ? employeeRepository.findByTenantIdAndActiveTrueAndDeletedAtIsNull(tenantId, pageable)
+                : employeeRepository.findByTenantIdAndDeletedAtIsNull(tenantId, pageable);
     }
 
     @Transactional(readOnly = true)

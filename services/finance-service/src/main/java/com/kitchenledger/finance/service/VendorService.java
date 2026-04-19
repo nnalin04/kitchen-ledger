@@ -12,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +24,11 @@ public class VendorService {
     @Transactional(readOnly = true)
     public List<Vendor> listByTenant(UUID tenantId) {
         return vendorRepository.findByTenantIdAndDeletedAtIsNull(tenantId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Vendor> listByTenant(UUID tenantId, Pageable pageable) {
+        return vendorRepository.findByTenantIdAndDeletedAtIsNull(tenantId, pageable);
     }
 
     @Transactional(readOnly = true)
