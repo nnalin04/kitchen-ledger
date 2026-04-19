@@ -30,5 +30,7 @@ public class EventEnvelope {
     @Builder.Default
     private String version = "1.0";
 
+    private String correlationId;
+
     private Map<String, Object> payload;
 }

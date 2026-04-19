@@ -73,6 +73,20 @@ async function bootstrap(): Promise<void> {
     '/api/auth/forgot-password':  3,
   };
 
+  // ── Correlation ID propagation (M-8) ─────────────────────────────────────
+  // Generate a unique correlation ID for every inbound request (or reuse if
+  // the client already sent one).  Echoed back in the response and forwarded
+  // to all upstream services via the x-correlation-id header so log entries
+  // across services can be correlated by this single identifier.
+  app.addHook('onRequest', async (req, reply) => {
+    const correlationId =
+      (req.headers['x-correlation-id'] as string | undefined) ||
+      `kl-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    // Mutate the inbound headers so the proxy picks it up when forwarding
+    (req.headers as Record<string, string>)['x-correlation-id'] = correlationId;
+    reply.header('x-correlation-id', correlationId);
+  });
+
   app.addHook('onRequest', async (req, reply) => {
     if (req.method !== 'POST') return;
     const limit = authRateLimits[req.url?.split('?')[0] ?? ''];

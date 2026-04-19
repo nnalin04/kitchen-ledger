@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import org.slf4j.MDC;
 
 /**
  * Reads X-User-Id, X-Tenant-Id, X-User-Role headers injected by the API Gateway
@@ -34,6 +35,19 @@ public class GatewayTrustFilter extends OncePerRequestFilter {
         String tenantId = request.getHeader("x-tenant-id");
         String userRole = request.getHeader("x-user-role");
 
+        String correlationId = request.getHeader("x-correlation-id");
+        MDC.put("correlationId", correlationId != null ? correlationId : "none");
+
+        String path = request.getRequestURI();
+        if (path.startsWith("/internal/") || path.startsWith("/actuator/")) {
+            try {
+                filterChain.doFilter(request, response);
+            } finally {
+                MDC.remove("correlationId");
+            }
+            return;
+        }
+
         if (userId != null)   request.setAttribute(ATTR_USER_ID, userId);
         if (tenantId != null) request.setAttribute(ATTR_TENANT_ID, tenantId);
         if (userRole != null) request.setAttribute(ATTR_USER_ROLE, userRole);
@@ -44,6 +58,7 @@ public class GatewayTrustFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
         } finally {
             TenantContext.clear();
+            MDC.remove("correlationId");
         }
     }
 }

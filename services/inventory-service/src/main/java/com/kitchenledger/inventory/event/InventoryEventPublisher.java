@@ -179,6 +179,7 @@ public class InventoryEventPublisher {
                 .producedBy("inventory-service")
                 .producedAt(Instant.now().toString())
                 .version("1.0")
+                .correlationId(org.slf4j.MDC.get("correlationId"))
                 .payload(payload)
                 .build();
 

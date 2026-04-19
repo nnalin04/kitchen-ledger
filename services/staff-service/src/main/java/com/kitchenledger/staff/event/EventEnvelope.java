@@ -14,5 +14,6 @@ public class EventEnvelope {
     private String producedBy;
     private String producedAt;
     private String version;
+    private String correlationId;
     private Map<String, Object> payload;
 }

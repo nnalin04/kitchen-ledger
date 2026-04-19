@@ -174,6 +174,7 @@ public class StaffEventPublisher {
                 .producedBy("staff-service")
                 .producedAt(Instant.now().toString())
                 .version("1.0")
+                .correlationId(org.slf4j.MDC.get("correlationId"))
                 .payload(payload)
                 .build();
         rabbitTemplate.convertAndSend(exchange, eventType, envelope);

@@ -12,6 +12,8 @@ import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 
+import org.slf4j.MDC;
+
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -37,6 +39,7 @@ public class AuthEventPublisher {
                 .eventType("auth.user.registered")
                 .tenantId(tenant.getId())
                 .producedBy("auth-service")
+                .correlationId(MDC.get("correlationId"))
                 .payload(Map.of(
                         "user_id", user.getId().toString(),
                         "email", user.getEmail(),
@@ -70,6 +73,7 @@ public class AuthEventPublisher {
                 .eventType("auth.tenant.created")
                 .tenantId(tenantId)
                 .producedBy("auth-service")
+                .correlationId(MDC.get("correlationId"))
                 .payload(Map.of("tenant_id", tenantId.toString()))
                 .build();
 
@@ -93,6 +97,7 @@ public class AuthEventPublisher {
                 .eventType("auth.user.invited")
                 .tenantId(invitedUser.getTenantId())
                 .producedBy("auth-service")
+                .correlationId(MDC.get("correlationId"))
                 .payload(Map.of(
                         "user_id", invitedUser.getId().toString(),
                         "email", invitedUser.getEmail(),

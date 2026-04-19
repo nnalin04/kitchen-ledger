@@ -10,6 +10,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.UUID;
+import org.slf4j.MDC;
 
 @Component
 public class GatewayTrustFilter extends OncePerRequestFilter {
@@ -26,10 +27,17 @@ public class GatewayTrustFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
+        String correlationId = request.getHeader("x-correlation-id");
+        MDC.put("correlationId", correlationId != null ? correlationId : "none");
+
         // Internal service-to-service calls and health checks bypass gateway header validation.
         // They are protected by INTERNAL_SERVICE_SECRET or need no auth.
         if (path.startsWith("/internal/") || path.startsWith("/actuator/")) {
-            filterChain.doFilter(request, response);
+            try {
+                filterChain.doFilter(request, response);
+            } finally {
+                MDC.remove("correlationId");
+            }
             return;
         }
 
@@ -72,11 +80,13 @@ public class GatewayTrustFilter extends OncePerRequestFilter {
         // that activate RLS policies and supply the current user to the audit trigger.
         TenantContext.set(rawTenantId);
         TenantContext.setUserId(rawUserId);
+        
         try {
             filterChain.doFilter(request, response);
         } finally {
             // Always clear — prevents context leakage when threads are reused by the pool.
             TenantContext.clear();
+            MDC.remove("correlationId");
         }
     }
 }
