@@ -173,14 +173,22 @@ def _upload_pdf(job_id: str, tenant_id: str, pdf_bytes: bytes) -> str:
     return result.get("signedURL") or result.get("signedUrl", "")
 
 
-@shared_task(name="report_service.generate_report")
-def generate_report(job_id: str, report_type: str, params: dict, tenant_id: str) -> None:
+@shared_task(
+    name="report_service.generate_report",
+    bind=True,
+    max_retries=3,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def generate_report(self, job_id: str, report_type: str, params: dict, tenant_id: str) -> None:
     """
     Generate a report PDF and store it in Supabase Storage.
     Updates report_jobs status throughout: pending → processing → completed/failed.
+    Retries up to 3 times with exponential backoff (60s, 120s, 240s, capped at 600s).
     """
     report_name = _REPORT_NAMES.get(report_type, report_type.capitalize() + " Report")
-    logger.info("generate_report: starting job=%s type=%s tenant=%s", job_id, report_type, tenant_id)
+    logger.info("generate_report: starting job=%s type=%s tenant=%s attempt=%d",
+                job_id, report_type, tenant_id, self.request.retries)
 
     try:
         _set_status(job_id, "processing")
@@ -199,8 +207,36 @@ def generate_report(job_id: str, report_type: str, params: dict, tenant_id: str)
         logger.info("generate_report: completed job=%s url=%s", job_id, output_url)
 
     except Exception as exc:
-        logger.error("generate_report: failed job=%s error=%s", job_id, exc, exc_info=True)
+        logger.error("generate_report: failed job=%s attempt=%d error=%s",
+                     job_id, self.request.retries, exc, exc_info=True)
+        if self.request.retries < self.max_retries:
+            countdown = min(60 * (2 ** self.request.retries), 600)
+            raise self.retry(exc=exc, countdown=countdown)
+        # Final failure after all retries exhausted
         try:
             _set_status(job_id, "failed", error_message=str(exc)[:500])
         except Exception:
             pass  # DB might be unreachable; best effort
+        raise
+
+
+@shared_task(name="report_service.cleanup_stuck_jobs")
+def cleanup_stuck_jobs() -> None:
+    """Mark report jobs stuck in 'processing' for > 30 minutes as failed."""
+    try:
+        with _db_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE report_jobs
+                    SET status = 'failed',
+                        error_message = 'Job timed out after 30 minutes of processing',
+                        completed_at = NOW(),
+                        updated_at = NOW()
+                    WHERE status = 'processing'
+                      AND created_at < now() - INTERVAL '30 minutes'
+                """)
+            conn.commit()
+        logger.info("cleanup_stuck_jobs: completed")
+    except Exception:
+        logger.exception("cleanup_stuck_jobs: failed")
+        raise

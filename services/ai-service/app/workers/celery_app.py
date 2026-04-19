@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import settings
 
@@ -17,4 +18,10 @@ celery_app.conf.update(
     enable_utc=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    beat_schedule={
+        "cleanup-stuck-jobs": {
+            "task": "tasks.cleanup_stuck_jobs",
+            "schedule": crontab(minute="*/15"),
+        },
+    },
 )

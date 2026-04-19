@@ -54,19 +54,26 @@ def _download_file(url: str) -> tuple[bytes, str]:
 
 # ── OCR task ───────────────────────────────────────────────────────────────
 
-@celery_app.task(name="tasks.process_ocr", bind=True, max_retries=3)
+@celery_app.task(
+    name="tasks.process_ocr",
+    bind=True,
+    max_retries=3,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
 def process_ocr(self, job_id: str, file_url: str, tenant_id: str):
     """
     Download the file and run OCR.
     Uses Mindee if configured; falls back to Google Vision if not.
+    Retries up to 3 times with exponential backoff (60s, 120s, 240s, capped at 600s).
     """
-    logger.info("OCR task started: job_id=%s tenant=%s", job_id, tenant_id)
+    logger.info("OCR task started: job_id=%s tenant=%s attempt=%d",
+                job_id, tenant_id, self.request.retries)
     db = SessionLocal()
     try:
         job = _get_job(db, job_id)
         _mark_processing(db, job)
 
-        # Download file
         file_bytes, content_type = _download_file(file_url)
 
         result: dict[str, Any]
@@ -92,14 +99,19 @@ def process_ocr(self, job_id: str, file_url: str, tenant_id: str):
         logger.info("OCR task completed: job_id=%s", job_id)
 
     except Exception as exc:
-        logger.exception("OCR task failed: job_id=%s", job_id)
+        logger.exception("OCR task failed: job_id=%s attempt=%d", job_id, self.request.retries)
         db.rollback()
+        if self.request.retries < self.max_retries:
+            # Exponential backoff: 60s → 120s → 240s, capped at 600s
+            countdown = min(60 * (2 ** self.request.retries), 600)
+            raise self.retry(exc=exc, countdown=countdown)
+        # Final failure — persist error and do not retry
         try:
             job = _get_job(db, job_id)
-            _mark_failed(db, job, str(exc))
+            _mark_failed(db, job, str(exc)[:500])
         except Exception:
             pass
-        raise self.retry(exc=exc, countdown=30)
+        raise
     finally:
         db.close()
 
@@ -179,13 +191,21 @@ def _run_google_vision_ocr(file_bytes: bytes) -> dict[str, Any]:
 
 # ── Voice query task ────────────────────────────────────────────────────────
 
-@celery_app.task(name="tasks.process_voice_query", bind=True, max_retries=2)
+@celery_app.task(
+    name="tasks.process_voice_query",
+    bind=True,
+    max_retries=2,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
 def process_voice_query(self, job_id: str, query: str, context: str | None, tenant_id: str):
     """
     Interpret a natural-language query using OpenAI and map it to a structured
     KitchenLedger query.
+    Retries up to 2 times with exponential backoff (15s, 30s).
     """
-    logger.info("Voice query task started: job_id=%s tenant=%s", job_id, tenant_id)
+    logger.info("Voice query task started: job_id=%s tenant=%s attempt=%d",
+                job_id, tenant_id, self.request.retries)
     db = SessionLocal()
     try:
         job = _get_job(db, job_id)
@@ -197,14 +217,40 @@ def process_voice_query(self, job_id: str, query: str, context: str | None, tena
         logger.info("Voice query task completed: job_id=%s", job_id)
 
     except Exception as exc:
-        logger.exception("Voice query task failed: job_id=%s", job_id)
+        logger.exception("Voice query task failed: job_id=%s attempt=%d", job_id, self.request.retries)
         db.rollback()
+        if self.request.retries < self.max_retries:
+            countdown = min(15 * (2 ** self.request.retries), 120)
+            raise self.retry(exc=exc, countdown=countdown)
         try:
             job = _get_job(db, job_id)
-            _mark_failed(db, job, str(exc))
+            _mark_failed(db, job, str(exc)[:500])
         except Exception:
             pass
-        raise self.retry(exc=exc, countdown=15)
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(name="tasks.cleanup_stuck_jobs")
+def cleanup_stuck_jobs():
+    """Mark jobs stuck in 'processing' for > 30 minutes as failed."""
+    db = SessionLocal()
+    try:
+        from sqlalchemy import text
+        db.execute(text("""
+            UPDATE ai_jobs
+            SET status = 'failed',
+                error_message = 'Job timed out after 30 minutes of processing'
+            WHERE status = 'processing'
+              AND created_at < now() - INTERVAL '30 minutes'
+        """))
+        db.commit()
+        logger.info("cleanup_stuck_jobs completed")
+    except Exception:
+        db.rollback()
+        logger.exception("cleanup_stuck_jobs failed")
+        raise
     finally:
         db.close()
 
