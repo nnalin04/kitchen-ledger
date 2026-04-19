@@ -121,6 +121,40 @@ public class AuthEventPublisher {
         ));
     }
 
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public void publishPasswordResetRequested(com.kitchenledger.auth.model.User user, String rawToken) {
+        EventEnvelope envelope = EventEnvelope.builder()
+                .eventType("auth.password.reset.requested")
+                .tenantId(user.getTenantId())
+                .producedBy("auth-service")
+                .correlationId(MDC.get("correlationId"))
+                .payload(Map.of(
+                        "user_id",    user.getId().toString(),
+                        "email",      user.getEmail(),
+                        "full_name",  user.getFullName(),
+                        "reset_token", rawToken
+                ))
+                .build();
+        rabbitTemplate.convertAndSend(EXCHANGE, "auth.password.reset.requested", envelope);
+        log.debug("Published event auth.password.reset.requested for user {}", user.getId());
+    }
+
+    @Recover
+    public void recoverPublishPasswordResetRequested(AmqpException ex,
+                                                      com.kitchenledger.auth.model.User user,
+                                                      String rawToken) {
+        log.error("CRITICAL: Event publish failed for auth.password.reset.requested. Saving to outbox.", ex);
+        saveToOutbox(user.getTenantId(), "auth.password.reset.requested", Map.of(
+                "user_id",     user.getId().toString(),
+                "email",       user.getEmail(),
+                "reset_token", rawToken
+        ));
+    }
+
     private void saveToOutbox(UUID tenantId, String routingKey, Map<String, Object> payload) {
         try {
             String json = objectMapper.writeValueAsString(payload);

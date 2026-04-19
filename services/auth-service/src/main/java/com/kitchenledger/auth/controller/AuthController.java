@@ -5,6 +5,7 @@ import com.kitchenledger.auth.dto.response.AuthResponse;
 import com.kitchenledger.auth.dto.response.TenantResponse;
 import com.kitchenledger.auth.dto.response.UserResponse;
 import com.kitchenledger.auth.service.AuthService;
+import com.kitchenledger.auth.service.PasswordResetService;
 import com.kitchenledger.auth.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -23,6 +24,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final UserService userService;
+    private final PasswordResetService passwordResetService;
 
     // ── Public endpoints ─────────────────────────────────────────
 
@@ -42,6 +44,22 @@ public class AuthController {
         String ua = httpRequest.getHeader("User-Agent");
         AuthResponse authResponse = authService.login(req, ip, ua);
         return ResponseEntity.ok(Map.of("success", true, "data", authResponse));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, Object>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest req) {
+        // Always returns 200 — do not reveal whether the email exists
+        passwordResetService.forgotPassword(req.getEmail());
+        return ResponseEntity.ok(Map.of("success", true,
+                "message", "If this email is registered, a reset link has been sent."));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, Object>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest req) {
+        passwordResetService.resetPassword(req.getToken(), req.getNewPassword());
+        return ResponseEntity.ok(Map.of("success", true));
     }
 
     @PostMapping("/refresh")
