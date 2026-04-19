@@ -90,6 +90,8 @@ bind notification-service "staff.employee.hired"
 bind notification-service "staff.employee.noshow"
 bind notification-service "staff.overtime.approaching"
 bind notification-service "finance.cash.discrepancy"
+bind notification-service "inventory.receipt.confirmed"
+bind notification-service "staff.certification.expiring"
 
 # finance-service consumes:
 bind finance-service "auth.tenant.created"

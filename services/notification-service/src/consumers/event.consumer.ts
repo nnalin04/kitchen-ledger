@@ -26,6 +26,7 @@ const BINDINGS = [
   'staff.employee.noshow',
   'staff.overtime.approaching',
   'inventory.receipt.confirmed',
+  'staff.certification.expiring',
 ];
 
 let connection: Connection | null = null;
@@ -267,6 +268,19 @@ async function handleEvent(
       });
       break;
     }
+
+    case 'staff.certification.expiring':
+      await dispatch({
+        tenantId,
+        userId: null,
+        type: eventType,
+        priority: 'important',
+        title: 'Certification Expiring Soon',
+        body: `${payload.employee_name}'s ${payload.cert_name} expires on ${payload.expiry_date}`,
+        data: payload,
+        channels: ['push'],
+      });
+      break;
 
     default:
       console.warn('Unhandled event type:', eventType);

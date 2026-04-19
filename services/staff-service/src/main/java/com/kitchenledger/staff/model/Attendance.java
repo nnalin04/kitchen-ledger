@@ -45,6 +45,16 @@ public class Attendance {
     @Column(name = "notes")
     private String notes;
 
+    @Column(name = "break_start")
+    private Instant breakStart;
+
+    @Column(name = "break_end")
+    private Instant breakEnd;
+
+    /** DB-generated column: EXTRACT(EPOCH FROM (break_end - break_start)) / 60. Read-only. */
+    @Column(name = "break_minutes", insertable = false, updatable = false)
+    private Integer breakMinutes;
+
     @Column(name = "recorded_by", nullable = false)
     private UUID recordedBy;
 

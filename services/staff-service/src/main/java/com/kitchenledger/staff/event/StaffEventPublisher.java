@@ -138,6 +138,34 @@ public class StaffEventPublisher {
         ));
     }
 
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public void publishCertificationExpiring(UUID tenantId, UUID employeeId, String employeeName,
+                                             String certName, String expiryDate) {
+        Map<String, Object> payload = Map.of(
+                "employee_id",   employeeId.toString(),
+                "employee_name", employeeName,
+                "cert_name",     certName,
+                "expiry_date",   expiryDate
+        );
+        publishEnvelope(tenantId, "staff.certification.expiring", payload);
+    }
+
+    @Recover
+    public void recoverPublishCertificationExpiring(AmqpException ex, UUID tenantId, UUID employeeId,
+                                                    String employeeName, String certName, String expiryDate) {
+        log.error("CRITICAL: Event publish failed after 3 retries for key staff.certification.expiring. Saving to outbox.", ex);
+        saveToOutbox(tenantId, "staff.certification.expiring", Map.of(
+                "employee_id",   employeeId.toString(),
+                "employee_name", employeeName,
+                "cert_name",     certName,
+                "expiry_date",   expiryDate
+        ));
+    }
+
     private void publishEnvelope(UUID tenantId, String eventType, Map<String, Object> payload) {
         EventEnvelope envelope = EventEnvelope.builder()
                 .eventId(UUID.randomUUID().toString())

@@ -107,7 +107,7 @@ public class StockTransferService {
 
             // Validate sufficient stock before deducting
             if (inventoryItem.getCurrentStock().compareTo(transferItem.getQuantity()) < 0) {
-                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Insufficient stock for item '" + inventoryItem.getName()
                         + "': available=" + inventoryItem.getCurrentStock()
                         + ", requested=" + transferItem.getQuantity());
