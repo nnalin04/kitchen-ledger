@@ -22,6 +22,7 @@ public class StockTransferController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @RequiresRole({"owner", "manager", "kitchen_staff"})
     public StockTransferResponse createTransfer(@Valid @RequestBody CreateTransferRequest request) {
         return transferService.createTransfer(request);
     }
@@ -52,6 +53,7 @@ public class StockTransferController {
 
     @PostMapping("/{id}/cancel")
     @ResponseStatus(HttpStatus.OK)
+    @RequiresRole({"owner", "manager"})
     public StockTransferResponse cancelTransfer(@PathVariable UUID id) {
         return transferService.cancelTransfer(id);
     }
