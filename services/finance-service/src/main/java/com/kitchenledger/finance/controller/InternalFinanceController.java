@@ -50,11 +50,16 @@ public class InternalFinanceController {
     @GetMapping("/expenses")
     public ResponseEntity<List<ExpenseResponse>> listExpenses(
             @RequestHeader("x-internal-secret") String secret,
-            @RequestParam UUID tenantId) {
+            @RequestParam UUID tenantId,
+            @RequestParam(required = false) LocalDate from,
+            @RequestParam(required = false) LocalDate to) {
         verifySecret(secret);
+        // Default: current calendar month when no dates supplied
+        LocalDate startDate = from != null ? from : LocalDate.now().withDayOfMonth(1);
+        LocalDate endDate   = to   != null ? to   : LocalDate.now();
         List<ExpenseResponse> items = expenseRepository
-                .findByTenantIdAndDeletedAtIsNullOrderByExpenseDateDesc(
-                        tenantId, PageRequest.of(0, 500))
+                .findByTenantIdAndExpenseDateBetweenAndDeletedAtIsNullOrderByExpenseDateDesc(
+                        tenantId, startDate, endDate, PageRequest.of(0, 500))
                 .map(ExpenseResponse::from)
                 .getContent();
         return ResponseEntity.ok(items);

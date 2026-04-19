@@ -117,7 +117,8 @@ def _fetch_data(report_type: str, params: dict, tenant_id: str) -> list:
     if report_type == "expenses":
         data = httpx.get(
             f"{settings.finance_service_url}/internal/finance/expenses",
-            params={"tenantId": tenant_id}, headers=_INTERNAL_HEADERS, timeout=30,
+            params={"tenantId": tenant_id, "from": from_date, "to": to_date},
+            headers=_INTERNAL_HEADERS, timeout=30,
         ).json()
         return data if isinstance(data, list) else []
 

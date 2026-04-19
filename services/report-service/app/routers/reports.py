@@ -67,10 +67,10 @@ async def pnl_summary(
         params={"tenantId": tenant_id, "from": str(from_date), "to": str(to_date)},
     )
 
-    # Fetch expenses from finance service
+    # Fetch expenses from finance service (date-scoped server-side)
     expense_data = await get_json(
         f"{settings.finance_service_url}/internal/finance/expenses",
-        params={"tenantId": tenant_id},
+        params={"tenantId": tenant_id, "from": str(from_date), "to": str(to_date)},
     )
 
     # Aggregate DSR
@@ -181,10 +181,10 @@ async def expense_report(
 
     expense_data = await get_json(
         f"{settings.finance_service_url}/internal/finance/expenses",
-        params={"tenantId": tenant_id},
+        params={"tenantId": tenant_id, "from": str(from_date), "to": str(to_date)},
     )
 
-    # Group by category, filter by date range
+    # Group by category (date filtering now done server-side; guard locally too)
     by_category: dict[str, list[dict[str, Any]]] = defaultdict(list)
     total = Decimal("0")
 
