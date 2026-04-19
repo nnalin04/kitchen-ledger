@@ -8,6 +8,7 @@ import com.kitchenledger.finance.exception.ValidationException;
 import com.kitchenledger.finance.model.DailySalesReport;
 import com.kitchenledger.finance.repository.DailySalesReportRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -80,7 +81,15 @@ public class DailySalesReportService {
                 .notes(req.getNotes())
                 .createdBy(createdBy)
                 .build();
-        return dsrRepository.save(dsr);
+        try {
+            return dsrRepository.save(dsr);
+        } catch (DataIntegrityViolationException e) {
+            if (e.getMessage() != null && e.getMessage().contains("uq_dsr_tenant_date")) {
+                throw new ConflictException("A Daily Sales Report for " + req.getReportDate()
+                        + " already exists. Use PUT to update the existing report.");
+            }
+            throw e;
+        }
     }
 
     @Transactional
