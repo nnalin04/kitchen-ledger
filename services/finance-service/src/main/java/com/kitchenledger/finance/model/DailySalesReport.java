@@ -58,6 +58,33 @@ public class DailySalesReport {
     @Builder.Default
     private BigDecimal otherSales = BigDecimal.ZERO;
 
+    @Column(name = "gift_card_sales", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal giftCardSales = BigDecimal.ZERO;
+
+    @Column(name = "wallet_sales", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal walletSales = BigDecimal.ZERO;
+
+    /** Total comped items/meals for the day (manager-authorized). */
+    @Column(name = "comps_total", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal compsTotal = BigDecimal.ZERO;
+
+    /** Total voided transactions for the day. */
+    @Column(name = "voids_total", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal voidsTotal = BigDecimal.ZERO;
+
+    /** Total tips collected (cash + card tip-outs). */
+    @Column(name = "tips_collected", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal tipsCollected = BigDecimal.ZERO;
+
+    /** Manager who authorized void/comp/discount workflow for this day's report. */
+    @Column(name = "manager_auth_id")
+    private UUID managerAuthId;
+
     @Column(name = "vat_collected", nullable = false, precision = 12, scale = 2)
     @Builder.Default
     private BigDecimal vatCollected = BigDecimal.ZERO;

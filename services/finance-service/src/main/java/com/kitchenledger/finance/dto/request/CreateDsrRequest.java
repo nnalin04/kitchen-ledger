@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.UUID;
 
 @Data
 public class CreateDsrRequest {
@@ -41,6 +42,24 @@ public class CreateDsrRequest {
 
     @PositiveOrZero
     private BigDecimal costOfGoodsSold = BigDecimal.ZERO;
+
+    @PositiveOrZero
+    private BigDecimal giftCardSales = BigDecimal.ZERO;
+
+    @PositiveOrZero
+    private BigDecimal walletSales = BigDecimal.ZERO;
+
+    @PositiveOrZero
+    private BigDecimal compsTotal = BigDecimal.ZERO;
+
+    @PositiveOrZero
+    private BigDecimal voidsTotal = BigDecimal.ZERO;
+
+    @PositiveOrZero
+    private BigDecimal tipsCollected = BigDecimal.ZERO;
+
+    /** Manager who authorized void/comp/discount for this day. */
+    private UUID managerAuthId;
 
     private String notes;
 }

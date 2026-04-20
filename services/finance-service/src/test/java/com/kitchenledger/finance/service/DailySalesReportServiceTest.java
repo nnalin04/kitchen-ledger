@@ -129,6 +129,35 @@ class DailySalesReportServiceTest {
         assertThat(dsr.isRequiresInvestigation()).isFalse();
     }
 
+    // ── PRD extended fields (HIGH-05) ─────────────────────────────────────────
+
+    @Test
+    void testCreate_prdExtendedFields_compsVoidsGiftCardWalletTips_persisted() {
+        LocalDate today = LocalDate.now();
+        when(dsrRepository.findByTenantIdAndReportDate(tenantId, today))
+                .thenReturn(Optional.empty());
+        when(dsrRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        CreateDsrRequest req = new CreateDsrRequest();
+        req.setReportDate(today);
+        req.setGrossSales(new BigDecimal("40000"));
+        req.setCompsTotal(new BigDecimal("500"));
+        req.setVoidsTotal(new BigDecimal("200"));
+        req.setGiftCardSales(new BigDecimal("2000"));
+        req.setWalletSales(new BigDecimal("3000"));
+        req.setTipsCollected(new BigDecimal("1500"));
+        req.setManagerAuthId(UUID.randomUUID());
+
+        DailySalesReport saved = dsrService.create(tenantId, userId, req);
+
+        assertThat(saved.getCompsTotal()).isEqualByComparingTo("500");
+        assertThat(saved.getVoidsTotal()).isEqualByComparingTo("200");
+        assertThat(saved.getGiftCardSales()).isEqualByComparingTo("2000");
+        assertThat(saved.getWalletSales()).isEqualByComparingTo("3000");
+        assertThat(saved.getTipsCollected()).isEqualByComparingTo("1500");
+        assertThat(saved.getManagerAuthId()).isNotNull();
+    }
+
     // ── average check size ────────────────────────────────────────────────────
 
     @Test
