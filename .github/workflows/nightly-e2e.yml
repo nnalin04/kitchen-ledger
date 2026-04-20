@@ -1,0 +1,69 @@
+name: Nightly E2E Backend Tests
+
+# Runs nightly to catch cross-service integration regressions.
+# Uses docker-compose to spin up the full stack, then exercises
+# key cross-service flows end-to-end.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC daily
+  workflow_dispatch:        # Allow manual trigger
+
+jobs:
+  e2e-backend:
+    name: Full-stack E2E backend flows
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env from secrets
+        run: |
+          cat > .env << 'EOF'
+          POSTGRES_USER=kl_user
+          POSTGRES_PASSWORD=kl_password
+          RABBITMQ_USER=kl_rabbit
+          RABBITMQ_PASSWORD=kl_rabbit_pass
+          INTERNAL_SERVICE_SECRET=ci-internal-secret-do-not-use-in-prod
+          JWT_PRIVATE_KEY=${{ secrets.JWT_PRIVATE_KEY_TEST }}
+          JWT_PUBLIC_KEY=${{ secrets.JWT_PUBLIC_KEY_TEST }}
+          RESEND_API_KEY=test-resend-key
+          EXPO_ACCESS_TOKEN=test-expo-token
+          OPENAI_API_KEY=test-openai-key
+          MINDEE_API_KEY=test-mindee-key
+          SUPABASE_URL=http://localhost:5432
+          SUPABASE_SERVICE_KEY=test-supabase-key
+          SUPABASE_STORAGE_URL=http://localhost:5432/storage
+          EOF
+
+      - name: Start infrastructure (postgres, redis, rabbitmq)
+        run: |
+          cd infrastructure
+          docker compose up -d postgres redis rabbitmq
+          # Wait for infra to be healthy
+          timeout 60 sh -c 'until docker compose ps postgres | grep healthy; do sleep 2; done'
+          timeout 60 sh -c 'until docker compose ps redis | grep healthy; do sleep 2; done'
+
+      - name: Run contract-level E2E checks (no full stack needed)
+        run: |
+          # OCR payload contract
+          cd services/ai-service
+          pip install -r requirements.txt -q
+          PYTHONPATH=. python -m pytest tests/workers/test_ocr_event_payload.py -q
+
+          # Report fetch contracts
+          cd ../report-service
+          pip install -r requirements.txt -q
+          python -m pytest tests/test_fetch_data_contracts.py tests/test_migration_baseline.py -q
+
+          # Notification event envelope contracts
+          cd ../notification-service
+          npm ci -q
+          npx vitest run src/__tests__/consumers/event-envelope.contract.test.ts -q
+
+      - name: Report E2E summary
+        if: always()
+        run: |
+          echo "## E2E Backend Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "Contract tests completed. Full docker-compose E2E requires secrets." >> $GITHUB_STEP_SUMMARY

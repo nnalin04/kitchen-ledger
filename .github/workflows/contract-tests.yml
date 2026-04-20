@@ -1,0 +1,86 @@
+name: Contract Tests
+
+# Contract tests run on every PR + push to main.
+# They verify cross-service event envelope compatibility and
+# report-service internal endpoint data contracts — fast, no live DB needed.
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+
+jobs:
+  # ── notification-service event envelope contract tests ────────────────────
+  notification-contracts:
+    name: Notification event envelope contracts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/notification-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: services/notification-service/package-lock.json
+      - run: npm ci
+      - name: Run envelope contract tests
+        run: npx vitest run src/__tests__/consumers/event-envelope.contract.test.ts src/__tests__/consumers/event.consumer.push-routing.test.ts src/__tests__/providers/dispatcher.fanout.test.ts
+
+  # ── report-service fetch data contract tests ──────────────────────────────
+  report-contracts:
+    name: Report service data fetch contracts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/report-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: services/report-service/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Run fetch contract tests
+        run: pytest tests/test_fetch_data_contracts.py tests/test_migration_baseline.py -v
+
+  # ── ai-service OCR payload contract tests ─────────────────────────────────
+  ai-ocr-contracts:
+    name: AI OCR payload contract tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/ai-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: services/ai-service/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Run OCR payload contract tests
+        run: pytest tests/workers/test_ocr_event_payload.py -v
+
+  # ── inventory EventEnvelope serialization contract ────────────────────────
+  inventory-envelope-contracts:
+    name: Inventory EventEnvelope serialization contract
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/inventory-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+      - name: Run envelope serialization + PO lifecycle tests
+        run: mvn test -Dtest="EventEnvelopeSerializationTest,PurchaseOrderServiceLifecycleTest,ShiftServiceRulesTest" --batch-mode -pl .
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: 'true'
+          INTERNAL_SERVICE_SECRET: test-internal-secret-for-ci
