@@ -4,6 +4,7 @@ import { config } from '../config';
 import {
   dispatchWelcomeEmail,
   dispatchInvitationEmail,
+  dispatchPasswordResetEmail,
   dispatch,
   dispatchToTenantRecipients,
 } from '../providers/dispatcher';
@@ -15,6 +16,7 @@ const QUEUE_NAME = 'notification-service';
 const BINDINGS = [
   'auth.user.registered',
   'auth.user.invited',
+  'auth.password.reset.requested',
   'inventory.stock.low',
   'inventory.stock.expiring',
   'inventory.po.sent',
@@ -124,6 +126,16 @@ async function handleEvent(
         role:        payload.role,
         inviteToken: payload.invite_token,
         tenantName:  payload.tenant_name ?? 'your restaurant',
+      });
+      break;
+
+    case 'auth.password.reset.requested':
+      await dispatchPasswordResetEmail({
+        userId:     payload.user_id,
+        tenantId,
+        email:      payload.email,
+        fullName:   payload.full_name ?? payload.email,
+        resetToken: payload.reset_token,
       });
       break;
 

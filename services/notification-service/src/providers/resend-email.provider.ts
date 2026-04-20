@@ -51,6 +51,34 @@ export function welcomeEmail(params: {
   };
 }
 
+export function passwordResetEmail(params: {
+  fullName: string;
+  resetUrl: string;
+}): EmailPayload {
+  return {
+    to: '',
+    subject: 'Reset your KitchenLedger password',
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h2>Password reset request</h2>
+        <p>Hi ${params.fullName},</p>
+        <p>We received a request to reset your password. Click the button below to choose a new one.</p>
+        <a href="${params.resetUrl}"
+           style="display:inline-block;background:#2563eb;color:#fff;padding:12px 24px;
+                  border-radius:6px;text-decoration:none;margin-top:16px">
+          Reset Password
+        </a>
+        <p style="color:#6b7280;font-size:13px;margin-top:16px">
+          This link expires in 1 hour. If you didn't request a reset, you can safely ignore this email.
+        </p>
+        <p style="color:#6b7280;font-size:13px;margin-top:32px">
+          KitchenLedger · The all-in-one platform for independent restaurants
+        </p>
+      </div>
+    `,
+  };
+}
+
 export function invitationEmail(params: {
   fullName: string;
   restaurantName: string;

@@ -1,5 +1,5 @@
 import { pool } from '../db';
-import { sendEmail, welcomeEmail, invitationEmail } from './resend-email.provider';
+import { sendEmail, welcomeEmail, invitationEmail, passwordResetEmail } from './resend-email.provider';
 import { sendPush } from './expo-push.provider';
 import { getUsersByRole } from '../clients/auth.client';
 import { config } from '../config';
@@ -174,6 +174,34 @@ export async function dispatchInvitationEmail(payload: {
     title: 'Invitation sent',
     body: `Invitation email sent to ${payload.email}`,
     data: { email: payload.email, role: payload.role },
+    channels: ['email'],
+  });
+}
+
+/**
+ * Dispatches a password-reset email. The reset token is used to construct the
+ * URL but is never logged at INFO level (security).
+ */
+export async function dispatchPasswordResetEmail(payload: {
+  userId: string;
+  tenantId: string;
+  email: string;
+  fullName: string;
+  resetToken: string;
+}): Promise<void> {
+  const resetUrl = `${config.APP_URL}/reset-password?token=${payload.resetToken}`;
+  const tmpl = passwordResetEmail({ fullName: payload.fullName, resetUrl });
+
+  await sendEmail({ ...tmpl, to: payload.email });
+
+  await dispatch({
+    tenantId: payload.tenantId,
+    userId:   payload.userId,
+    type:    'auth.password.reset.requested',
+    priority: 'important',
+    title:    tmpl.subject,
+    body:     'A password reset link has been sent to your email.',
+    data:     { email: payload.email }, // reset_token deliberately excluded from stored record
     channels: ['email'],
   });
 }

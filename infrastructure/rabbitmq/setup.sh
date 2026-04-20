@@ -78,6 +78,7 @@ bind() {
 # notification-service consumes:
 bind notification-service "auth.user.registered"
 bind notification-service "auth.user.invited"
+bind notification-service "auth.password.reset.requested"
 bind notification-service "inventory.stock.low"
 bind notification-service "inventory.stock.expiring"
 bind notification-service "inventory.po.sent"
