@@ -104,6 +104,15 @@ def _set_status(
         conn.commit()
 
 
+def _safe_list_get(url: str, query: dict | None = None) -> list[dict]:
+    """GET an internal endpoint and return the response as a list; returns [] on any error."""
+    try:
+        data = httpx.get(url, params=query, headers=_INTERNAL_HEADERS, timeout=30).json()
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
 def _fetch_data(report_type: str, params: dict, tenant_id: str) -> list:
     """Fetch aggregated data from the relevant internal service."""
     from_date = params.get("from", "")
@@ -111,24 +120,12 @@ def _fetch_data(report_type: str, params: dict, tenant_id: str) -> list:
     common    = {"tenantId": tenant_id, "from": from_date, "to": to_date}
     two = Decimal("0.01")
 
-    def _safe_list_get(url: str, query: dict | None = None) -> list[dict]:
-        try:
-            data = httpx.get(
-                url,
-                params=query or common,
-                headers=_INTERNAL_HEADERS,
-                timeout=30,
-            ).json()
-            return data if isinstance(data, list) else []
-        except Exception:
-            return []
-
     if report_type == "pnl":
-        dsr = _safe_list_get(f"{settings.finance_service_url}/internal/finance/dsr")
+        dsr = _safe_list_get(f"{settings.finance_service_url}/internal/finance/dsr", common)
         return dsr if isinstance(dsr, list) else []
 
     if report_type == "waste":
-        data = _safe_list_get(f"{settings.inventory_service_url}/internal/inventory/waste")
+        data = _safe_list_get(f"{settings.inventory_service_url}/internal/inventory/waste", common)
         return data if isinstance(data, list) else []
 
     if report_type == "expenses":
@@ -139,11 +136,11 @@ def _fetch_data(report_type: str, params: dict, tenant_id: str) -> list:
         return data if isinstance(data, list) else []
 
     if report_type == "staff-hours":
-        data = _safe_list_get(f"{settings.staff_service_url}/internal/staff/attendance")
+        data = _safe_list_get(f"{settings.staff_service_url}/internal/staff/attendance", common)
         return data if isinstance(data, list) else []
 
     if report_type == "inventory-variance":
-        counts = _safe_list_get(f"{settings.inventory_service_url}/internal/inventory/counts")
+        counts = _safe_list_get(f"{settings.inventory_service_url}/internal/inventory/counts", common)
         rows: list[dict] = []
         for row in counts:
             expected = Decimal(str(row.get("expected_quantity") or row.get("system_quantity") or 0))

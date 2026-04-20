@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
@@ -33,6 +34,7 @@ public class InternalStaffController {
 
     private final AttendanceRepository attendanceRepository;
     private final EmployeeRepository employeeRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     @Value("${internal.service-secret}")
     private String internalSecret;
@@ -73,6 +75,34 @@ public class InternalStaffController {
                 .toList();
 
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/audit/logs")
+    public ResponseEntity<List<Map<String, Object>>> auditLogs(
+            @RequestHeader("x-internal-secret") String secret,
+            @RequestParam UUID tenantId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) UUID userId,
+            @RequestParam(required = false) String eventType) {
+        verifySecret(secret);
+        Instant fromInstant = from != null ? from.atStartOfDay(ZoneOffset.UTC).toInstant() : Instant.EPOCH;
+        Instant toInstant   = to   != null ? to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant() : Instant.now();
+        String sql = """
+                SELECT id, tenant_id, user_id, event_type, table_name, record_id,
+                       old_data, new_data, changed_at
+                FROM audit_logs
+                WHERE tenant_id = ?
+                  AND changed_at >= ? AND changed_at < ?
+                  AND (? IS NULL OR user_id = ?::UUID)
+                  AND (? IS NULL OR event_type = ?)
+                ORDER BY changed_at DESC LIMIT 500
+                """;
+        String userIdStr = userId != null ? userId.toString() : null;
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                sql, tenantId, fromInstant, toInstant,
+                userIdStr, userIdStr, eventType, eventType);
+        return ResponseEntity.ok(rows);
     }
 
     private void verifySecret(String provided) {
