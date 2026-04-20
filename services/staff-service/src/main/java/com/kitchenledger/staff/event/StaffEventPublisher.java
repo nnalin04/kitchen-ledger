@@ -166,6 +166,28 @@ public class StaffEventPublisher {
         ));
     }
 
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public void publishTipDistributed(UUID tenantId, UUID tipPoolId, java.math.BigDecimal totalAmount) {
+        publishEnvelope(tenantId, "staff.tip.distributed", Map.of(
+                "tip_pool_id",  tipPoolId.toString(),
+                "total_amount", totalAmount.toPlainString()
+        ));
+    }
+
+    @Recover
+    public void recoverPublishTipDistributed(AmqpException ex, UUID tenantId, UUID tipPoolId,
+                                              java.math.BigDecimal totalAmount) {
+        log.error("CRITICAL: Event publish failed for staff.tip.distributed. Saving to outbox.", ex);
+        saveToOutbox(tenantId, "staff.tip.distributed", Map.of(
+                "tip_pool_id",  tipPoolId.toString(),
+                "total_amount", totalAmount.toPlainString()
+        ));
+    }
+
     private void publishEnvelope(UUID tenantId, String eventType, Map<String, Object> payload) {
         EventEnvelope envelope = EventEnvelope.builder()
                 .eventId(UUID.randomUUID().toString())
