@@ -13,7 +13,9 @@ Flow per task:
 from __future__ import annotations
 import io
 import logging
+from collections import defaultdict
 from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
 
 import httpx
 import psycopg2
@@ -48,6 +50,14 @@ _REPORT_NAMES = {
     "waste":        "Waste Report",
     "expenses":     "Expense Breakdown",
     "staff-hours":  "Staff Hours Report",
+    "inventory-variance": "Inventory Variance Report",
+    "food-cost-by-category": "Food Cost by Category Report",
+    "labor-cost": "Labor Cost Report",
+    "menu-engineering": "Menu Engineering Matrix Report",
+    "vendor-spend": "Vendor Spend Analysis Report",
+    "splh": "Sales per Labor Hour Report",
+    "employee-performance": "Employee Performance Report",
+    "audit-log": "Audit Log Report",
 }
 
 
@@ -99,34 +109,125 @@ def _fetch_data(report_type: str, params: dict, tenant_id: str) -> list:
     from_date = params.get("from", "")
     to_date   = params.get("to", "")
     common    = {"tenantId": tenant_id, "from": from_date, "to": to_date}
+    two = Decimal("0.01")
+
+    def _safe_list_get(url: str, query: dict | None = None) -> list[dict]:
+        try:
+            data = httpx.get(
+                url,
+                params=query or common,
+                headers=_INTERNAL_HEADERS,
+                timeout=30,
+            ).json()
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
 
     if report_type == "pnl":
-        dsr = httpx.get(
-            f"{settings.finance_service_url}/internal/finance/dsr",
-            params=common, headers=_INTERNAL_HEADERS, timeout=30,
-        ).json()
+        dsr = _safe_list_get(f"{settings.finance_service_url}/internal/finance/dsr")
         return dsr if isinstance(dsr, list) else []
 
     if report_type == "waste":
-        data = httpx.get(
-            f"{settings.inventory_service_url}/internal/inventory/waste",
-            params=common, headers=_INTERNAL_HEADERS, timeout=30,
-        ).json()
+        data = _safe_list_get(f"{settings.inventory_service_url}/internal/inventory/waste")
         return data if isinstance(data, list) else []
 
     if report_type == "expenses":
-        data = httpx.get(
+        data = _safe_list_get(
             f"{settings.finance_service_url}/internal/finance/expenses",
-            params={"tenantId": tenant_id, "from": from_date, "to": to_date},
-            headers=_INTERNAL_HEADERS, timeout=30,
-        ).json()
+            {"tenantId": tenant_id, "from": from_date, "to": to_date},
+        )
         return data if isinstance(data, list) else []
 
     if report_type == "staff-hours":
-        data = httpx.get(
-            f"{settings.staff_service_url}/internal/staff/attendance",
-            params=common, headers=_INTERNAL_HEADERS, timeout=30,
-        ).json()
+        data = _safe_list_get(f"{settings.staff_service_url}/internal/staff/attendance")
+        return data if isinstance(data, list) else []
+
+    if report_type == "inventory-variance":
+        counts = _safe_list_get(f"{settings.inventory_service_url}/internal/inventory/counts")
+        rows: list[dict] = []
+        for row in counts:
+            expected = Decimal(str(row.get("expected_quantity") or row.get("system_quantity") or 0))
+            actual = Decimal(str(row.get("actual_quantity") or row.get("counted_quantity") or 0))
+            variance = (actual - expected).quantize(two, rounding=ROUND_HALF_UP)
+            rows.append(
+                {
+                    "item_name": row.get("item_name") or row.get("itemName") or str(row.get("item_id", "")),
+                    "expected_qty": float(expected),
+                    "actual_qty": float(actual),
+                    "variance_qty": float(variance),
+                    "variance_pct": float(((variance / expected) * 100).quantize(two, rounding=ROUND_HALF_UP)) if expected else 0.0,
+                }
+            )
+        return rows
+
+    if report_type == "food-cost-by-category":
+        expenses = _safe_list_get(f"{settings.finance_service_url}/internal/finance/expenses")
+        dsr = _safe_list_get(f"{settings.finance_service_url}/internal/finance/dsr")
+        revenue = sum(Decimal(str(d.get("netSales") or d.get("net_sales") or 0)) for d in dsr)
+        by_category: dict[str, Decimal] = defaultdict(Decimal)
+        for e in expenses:
+            category = str(e.get("category") or "other")
+            by_category[category] += Decimal(str(e.get("amount") or 0))
+        rows = []
+        for category, amount in sorted(by_category.items()):
+            pct = ((amount / revenue) * 100).quantize(two, rounding=ROUND_HALF_UP) if revenue else Decimal("0.00")
+            rows.append({"category": category, "cost_amount": float(amount), "cost_pct_of_revenue": float(pct)})
+        return rows
+
+    if report_type == "labor-cost":
+        expenses = _safe_list_get(f"{settings.finance_service_url}/internal/finance/expenses")
+        dsr = _safe_list_get(f"{settings.finance_service_url}/internal/finance/dsr")
+        revenue = sum(Decimal(str(d.get("netSales") or d.get("net_sales") or 0)) for d in dsr)
+        labor = Decimal("0")
+        for e in expenses:
+            category = str(e.get("category") or "").lower()
+            if category in {"labor", "payroll", "wages", "salary", "staff"}:
+                labor += Decimal(str(e.get("amount") or 0))
+        pct = ((labor / revenue) * 100).quantize(two, rounding=ROUND_HALF_UP) if revenue else Decimal("0.00")
+        return [{"labor_cost": float(labor), "revenue": float(revenue), "labor_pct": float(pct)}]
+
+    if report_type == "menu-engineering":
+        items = _safe_list_get(f"{settings.inventory_service_url}/internal/inventory/recipes")
+        return [
+            {
+                "menu_item": i.get("name") or i.get("item_name"),
+                "recipe_cost": i.get("cost") or i.get("recipe_cost") or 0,
+                "classification": "unknown",
+            }
+            for i in items
+        ]
+
+    if report_type == "vendor-spend":
+        expenses = _safe_list_get(f"{settings.finance_service_url}/internal/finance/expenses")
+        by_vendor: dict[str, Decimal] = defaultdict(Decimal)
+        for e in expenses:
+            vendor = str(e.get("vendor_name") or e.get("vendorId") or e.get("vendor_id") or "unknown")
+            by_vendor[vendor] += Decimal(str(e.get("amount") or 0))
+        return [{"vendor": v, "total_spend": float(a)} for v, a in sorted(by_vendor.items(), key=lambda x: x[1], reverse=True)]
+
+    if report_type == "splh":
+        dsr = _safe_list_get(f"{settings.finance_service_url}/internal/finance/dsr")
+        attendance = _safe_list_get(f"{settings.staff_service_url}/internal/staff/attendance")
+        revenue = sum(Decimal(str(d.get("netSales") or d.get("net_sales") or 0)) for d in dsr)
+        hours = sum(Decimal(str(a.get("hoursWorked") or a.get("hours_worked") or 0)) for a in attendance)
+        splh = (revenue / hours).quantize(two, rounding=ROUND_HALF_UP) if hours else Decimal("0.00")
+        return [{"revenue": float(revenue), "labor_hours": float(hours), "splh": float(splh)}]
+
+    if report_type == "employee-performance":
+        attendance = _safe_list_get(f"{settings.staff_service_url}/internal/staff/attendance")
+        by_employee: dict[str, dict] = {}
+        for rec in attendance:
+            employee_id = str(rec.get("employeeId") or rec.get("employee_id") or "unknown")
+            by_employee.setdefault(employee_id, {"employee_id": employee_id, "hours": Decimal("0"), "shifts": 0})
+            by_employee[employee_id]["hours"] += Decimal(str(rec.get("hoursWorked") or rec.get("hours_worked") or 0))
+            by_employee[employee_id]["shifts"] += 1
+        return [
+            {"employee_id": e["employee_id"], "total_hours": float(e["hours"]), "shift_count": e["shifts"]}
+            for e in by_employee.values()
+        ]
+
+    if report_type == "audit-log":
+        data = _safe_list_get(f"{settings.finance_service_url}/internal/audit/logs")
         return data if isinstance(data, list) else []
 
     return []

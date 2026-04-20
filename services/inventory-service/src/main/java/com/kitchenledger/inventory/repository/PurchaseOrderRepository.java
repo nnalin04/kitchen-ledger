@@ -23,4 +23,8 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, UU
 
     /** Latest PO number to derive the next one. */
     Optional<PurchaseOrder> findTopByTenantIdOrderByCreatedAtDesc(UUID tenantId);
+
+    /** Check for any non-closed/non-cancelled POs for a supplier. */
+    boolean existsByTenantIdAndSupplierIdAndDeletedAtIsNullAndStatusIn(
+            UUID tenantId, UUID supplierId, List<PurchaseOrderStatus> statuses);
 }

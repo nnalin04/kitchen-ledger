@@ -43,6 +43,14 @@ public class VendorPaymentController {
                         paymentService.create(tenantId(req), userId(req), body)));
     }
 
+    @PostMapping("/{id}/paid")
+    @RequiresRole({"owner", "manager"})
+    public ResponseEntity<VendorPaymentResponse> markPaid(HttpServletRequest req,
+                                                           @PathVariable UUID id) {
+        return ResponseEntity.ok(VendorPaymentResponse.from(
+                paymentService.markPaid(tenantId(req), id)));
+    }
+
     private UUID tenantId(HttpServletRequest req) {
         return (UUID) req.getAttribute(GatewayTrustFilter.ATTR_TENANT_ID);
     }

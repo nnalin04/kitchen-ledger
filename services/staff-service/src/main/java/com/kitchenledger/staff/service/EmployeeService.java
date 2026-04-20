@@ -82,6 +82,12 @@ public class EmployeeService {
         return employeeRepository.save(employee);
     }
 
+    @Transactional(readOnly = true)
+    public Employee getByUserId(UUID tenantId, UUID userId) {
+        return employeeRepository.findByTenantIdAndUserIdAndDeletedAtIsNull(tenantId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found for user: " + userId));
+    }
+
     @Transactional
     public void terminate(UUID tenantId, UUID id) {
         Employee employee = getById(tenantId, id);

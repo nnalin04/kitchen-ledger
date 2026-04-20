@@ -99,21 +99,23 @@ class TestGenerateReport:
         assert "url" in payload
 
     @patch("app.workers.tasks.publish_event")
-    @patch("app.workers.tasks._get_supabase")
+    @patch("app.workers.tasks._upload_pdf")
     @patch("app.workers.tasks.httpx")
     @patch("app.workers.tasks.psycopg2")
-    def test_marks_failed_on_http_exception(self, mock_psycopg2, mock_httpx, mock_supabase, mock_publish):
-        """If HTTP call to internal service fails, status should be set to 'failed'."""
+    def test_marks_failed_on_http_exception(self, mock_psycopg2, mock_httpx, mock_upload_pdf, mock_publish):
+        """On final retry, downstream failure should set status='failed' and stop publishing."""
         conn, cursor = _mock_db()
         mock_psycopg2.connect.return_value = conn
-        mock_httpx.get.side_effect = Exception("service unavailable")
+        mock_httpx.get.return_value = MagicMock(status_code=200, json=MagicMock(return_value=[]))
+        mock_upload_pdf.side_effect = Exception("storage unavailable")
 
         job_id   = str(uuid.uuid4())
         tenant_id = str(uuid.uuid4())
 
         from app.workers.tasks import generate_report
-        # Should not raise — errors are caught and status set to failed
-        generate_report(job_id, "pnl", {"from": "2026-01-01", "to": "2026-01-31"}, tenant_id)
+        generate_report.request.retries = generate_report.max_retries
+        with pytest.raises(Exception, match="storage unavailable"):
+            generate_report(job_id, "pnl", {"from": "2026-01-01", "to": "2026-01-31"}, tenant_id)
 
         execute_calls = [str(c) for c in cursor.execute.call_args_list]
         assert any("failed" in c for c in execute_calls), \

@@ -3,7 +3,10 @@ package com.kitchenledger.inventory.service;
 import com.kitchenledger.inventory.dto.request.CreateSupplierRequest;
 import com.kitchenledger.inventory.exception.ConflictException;
 import com.kitchenledger.inventory.exception.ResourceNotFoundException;
+import com.kitchenledger.inventory.exception.ValidationException;
 import com.kitchenledger.inventory.model.Supplier;
+import com.kitchenledger.inventory.model.enums.PurchaseOrderStatus;
+import com.kitchenledger.inventory.repository.PurchaseOrderRepository;
 import com.kitchenledger.inventory.repository.SupplierRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,7 +22,13 @@ import org.springframework.data.domain.Pageable;
 @RequiredArgsConstructor
 public class SupplierService {
 
+    private static final List<PurchaseOrderStatus> OPEN_STATUSES = List.of(
+            PurchaseOrderStatus.draft, PurchaseOrderStatus.sent,
+            PurchaseOrderStatus.partial, PurchaseOrderStatus.received
+    );
+
     private final SupplierRepository supplierRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
 
     @Transactional(readOnly = true)
     public List<Supplier> listByTenant(UUID tenantId) {
@@ -79,6 +88,11 @@ public class SupplierService {
     @Transactional
     public void delete(UUID tenantId, UUID id) {
         Supplier supplier = getById(tenantId, id);
+        if (purchaseOrderRepository.existsByTenantIdAndSupplierIdAndDeletedAtIsNullAndStatusIn(
+                tenantId, supplier.getId(), OPEN_STATUSES)) {
+            throw new ValidationException(
+                    "Cannot delete supplier with open purchase orders. Close or cancel them first.");
+        }
         supplier.setDeletedAt(Instant.now());
         supplier.setActive(false);
         supplierRepository.save(supplier);

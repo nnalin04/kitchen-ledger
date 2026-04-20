@@ -10,9 +10,12 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface VendorPaymentRepository extends JpaRepository<VendorPayment, UUID> {
+
+    Optional<VendorPayment> findByIdAndTenantId(UUID id, UUID tenantId);
 
     Page<VendorPayment> findByTenantIdOrderByPaymentDateDesc(UUID tenantId, Pageable pageable);
 

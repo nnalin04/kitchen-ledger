@@ -2,24 +2,33 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Mock amqplib ──────────────────────────────────────────────────────────────
 
-const mockAck  = vi.fn();
-const mockNack = vi.fn();
-const mockConsume = vi.fn();
-const mockChannel = {
-  assertExchange: vi.fn().mockResolvedValue(undefined),
-  assertQueue:    vi.fn().mockResolvedValue(undefined),
-  bindQueue:      vi.fn().mockResolvedValue(undefined),
-  prefetch:       vi.fn(),
-  consume:        mockConsume,
-  close:          vi.fn().mockResolvedValue(undefined),
-  ack:            mockAck,
-  nack:           mockNack,
-};
-const mockConnection = {
-  createChannel: vi.fn().mockResolvedValue(mockChannel),
-  close:         vi.fn().mockResolvedValue(undefined),
-  on:            vi.fn(),
-};
+const {
+  mockAck,
+  mockNack,
+  mockConsume,
+  mockChannel,
+  mockConnection,
+} = vi.hoisted(() => {
+  const mockAck  = vi.fn();
+  const mockNack = vi.fn();
+  const mockConsume = vi.fn();
+  const mockChannel = {
+    assertExchange: vi.fn().mockResolvedValue(undefined),
+    assertQueue:    vi.fn().mockResolvedValue(undefined),
+    bindQueue:      vi.fn().mockResolvedValue(undefined),
+    prefetch:       vi.fn(),
+    consume:        mockConsume,
+    close:          vi.fn().mockResolvedValue(undefined),
+    ack:            mockAck,
+    nack:           mockNack,
+  };
+  const mockConnection = {
+    createChannel: vi.fn().mockResolvedValue(mockChannel),
+    close:         vi.fn().mockResolvedValue(undefined),
+    on:            vi.fn(),
+  };
+  return { mockAck, mockNack, mockConsume, mockChannel, mockConnection };
+});
 
 vi.mock('amqplib', () => ({
   default: { connect: vi.fn().mockResolvedValue(mockConnection) },
@@ -193,11 +202,8 @@ describe('event routing', () => {
   it('nacks (without requeue) on unknown event type', async () => {
     await simulateMessage('unknown.event.type', {});
 
-    // Unknown event: logs a warning but does NOT throw, so it should ACK
-    // (handler falls through to default: console.warn, no throw)
-    // The message still gets acked since no exception was thrown
-    expect(mockAck).toHaveBeenCalledOnce();
-    expect(mockNack).not.toHaveBeenCalled();
+    expect(mockNack).toHaveBeenCalledOnce();
+    expect(mockAck).not.toHaveBeenCalled();
   });
 
   it('nacks on malformed message content', async () => {

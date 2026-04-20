@@ -25,4 +25,14 @@ public interface ShiftRepository extends JpaRepository<Shift, UUID> {
     /** Used by no-show detection job: find all scheduled shifts for today that started before given time. */
     List<Shift> findByStatusAndShiftDateAndStartTimeBefore(
             ShiftStatus status, LocalDate shiftDate, LocalTime startTimeBefore);
+
+    /**
+     * Check for overlapping shifts for the same employee on the same date.
+     * Returns shifts where the existing shift's time range overlaps with [newStart, newEnd).
+     * Excludes cancelled shifts.
+     */
+    boolean existsByTenantIdAndEmployeeIdAndShiftDateAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
+            UUID tenantId, UUID employeeId, LocalDate shiftDate,
+            ShiftStatus excludedStatus,
+            LocalTime existingEndAfter, LocalTime existingStartBefore);
 }

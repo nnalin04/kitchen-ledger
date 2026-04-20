@@ -4,6 +4,7 @@ import com.kitchenledger.inventory.dto.request.CreateRecipeRequest;
 import com.kitchenledger.inventory.dto.response.RecipeResponse;
 import com.kitchenledger.inventory.exception.ConflictException;
 import com.kitchenledger.inventory.exception.ResourceNotFoundException;
+import com.kitchenledger.inventory.exception.ValidationException;
 import com.kitchenledger.inventory.model.InventoryItem;
 import com.kitchenledger.inventory.model.Recipe;
 import com.kitchenledger.inventory.model.RecipeIngredient;
@@ -111,6 +112,14 @@ public class RecipeService {
     private void applyIngredients(Recipe recipe, UUID tenantId,
                                    List<CreateRecipeRequest.IngredientRequest> requests) {
         for (CreateRecipeRequest.IngredientRequest ing : requests) {
+            // XOR: exactly one of inventoryItemId or subRecipeId must be set
+            boolean hasItem = ing.getInventoryItemId() != null;
+            boolean hasSub  = ing.getSubRecipeId() != null;
+            if (hasItem == hasSub) {
+                throw new ValidationException(
+                        "Each ingredient must reference exactly one of: inventoryItemId or subRecipeId");
+            }
+
             BigDecimal unitCost = BigDecimal.ZERO;
 
             if (ing.getInventoryItemId() != null) {

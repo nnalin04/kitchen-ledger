@@ -2,9 +2,12 @@ package com.kitchenledger.staff.controller;
 
 import com.kitchenledger.staff.dto.request.CreateShiftRequest;
 import com.kitchenledger.staff.dto.response.ShiftResponse;
+import com.kitchenledger.staff.exception.AccessDeniedException;
+import com.kitchenledger.staff.model.Employee;
 import com.kitchenledger.staff.model.enums.ShiftStatus;
 import com.kitchenledger.staff.security.GatewayTrustFilter;
 import com.kitchenledger.staff.security.RequiresRole;
+import com.kitchenledger.staff.service.EmployeeService;
 import com.kitchenledger.staff.service.ShiftService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -25,6 +28,7 @@ import java.util.UUID;
 public class ShiftController {
 
     private final ShiftService shiftService;
+    private final EmployeeService employeeService;
 
     @GetMapping
     public ResponseEntity<List<ShiftResponse>> list(
@@ -35,6 +39,16 @@ public class ShiftController {
             @RequestParam(required = false) UUID employeeId) {
 
         UUID tenantId = tenantId(req);
+
+        // Employees can only view their own shifts when filtering by employeeId
+        String role = req.getHeader("x-user-role");
+        if (employeeId != null && "employee".equals(role)) {
+            Employee self = employeeService.getByUserId(tenantId, userId(req));
+            if (!self.getId().equals(employeeId)) {
+                throw new AccessDeniedException("Employees may only view their own shifts");
+            }
+        }
+
         List<ShiftResponse> result;
 
         if (employeeId != null && from != null && to != null) {
@@ -49,6 +63,16 @@ public class ShiftController {
                     .stream().map(ShiftResponse::from).toList();
         }
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/publish")
+    @RequiresRole({"owner", "manager"})
+    public ResponseEntity<Map<String, Integer>> publish(
+            HttpServletRequest req,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        int count = shiftService.publish(tenantId(req), from, to);
+        return ResponseEntity.ok(Map.of("published", count));
     }
 
     @GetMapping("/{id}")

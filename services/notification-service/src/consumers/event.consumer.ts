@@ -1,4 +1,5 @@
 import amqplib, { Connection, Channel } from 'amqplib';
+import { z } from 'zod';
 import { config } from '../config';
 import {
   dispatchWelcomeEmail,
@@ -32,6 +33,25 @@ const BINDINGS = [
 let connection: Connection | null = null;
 let channel: Channel | null = null;
 
+const EventEnvelopeSchema = z.object({
+  event_type: z.string().min(1),
+  tenant_id: z.string().min(1),
+  payload: z.record(z.string(), z.unknown()).default({}),
+});
+
+function normalizeEnvelope(raw: unknown) {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Invalid event envelope: expected object');
+  }
+  const obj = raw as Record<string, unknown>;
+  const normalized = {
+    event_type: obj.event_type ?? obj.eventType,
+    tenant_id: obj.tenant_id ?? obj.tenantId,
+    payload: obj.payload,
+  };
+  return EventEnvelopeSchema.parse(normalized);
+}
+
 export async function startEventConsumer(): Promise<void> {
   connection = await amqplib.connect(config.RABBITMQ_URL);
   channel    = await connection.createChannel();
@@ -49,16 +69,16 @@ export async function startEventConsumer(): Promise<void> {
   channel.consume(QUEUE_NAME, async (msg) => {
     if (!msg) return;
     try {
-      const event = JSON.parse(msg.content.toString()) as {
-        event_type: string;
-        tenant_id: string;
-        payload: Record<string, string>;
-      };
+      const rawEvent = JSON.parse(msg.content.toString()) as unknown;
+      const event = normalizeEnvelope(rawEvent);
 
       await handleEvent(event.event_type, event.tenant_id, event.payload);
       channel!.ack(msg);
     } catch (err) {
-      console.error('Failed to process event:', err);
+      console.error('Failed to process event envelope', {
+        reason: err instanceof Error ? err.message : String(err),
+        raw: msg.content.toString(),
+      });
       // Reject without re-queue → goes to dead-letter (if configured) or is dropped
       channel!.nack(msg, false, false);
     }
@@ -78,7 +98,7 @@ export async function startEventConsumer(): Promise<void> {
 async function handleEvent(
   eventType: string,
   tenantId: string,
-  payload: Record<string, string>
+  payload: Record<string, any>
 ): Promise<void> {
   switch (eventType) {
     case 'auth.user.registered':
@@ -283,7 +303,7 @@ async function handleEvent(
       break;
 
     default:
-      console.warn('Unhandled event type:', eventType);
+      throw new Error(`Unsupported event type: ${eventType}`);
   }
 }
 

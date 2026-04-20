@@ -12,6 +12,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -55,5 +57,21 @@ public class VendorPaymentService {
         vendorRepository.save(vendor);
 
         return paymentRepository.save(payment);
+    }
+
+    @Transactional
+    public VendorPayment markPaid(UUID tenantId, UUID id) {
+        VendorPayment payment = paymentRepository.findByIdAndTenantId(id, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found: " + id));
+        payment.setPaymentStatus("paid");
+        if (payment.getPaymentDate() == null) {
+            payment.setPaymentDate(LocalDate.now());
+        }
+        return paymentRepository.save(payment);
+    }
+
+    @Transactional(readOnly = true)
+    public List<VendorPayment> getOverdue(UUID tenantId) {
+        return paymentRepository.findOverdue(tenantId, LocalDate.now());
     }
 }

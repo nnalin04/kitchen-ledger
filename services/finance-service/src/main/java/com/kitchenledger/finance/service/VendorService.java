@@ -3,12 +3,14 @@ package com.kitchenledger.finance.service;
 import com.kitchenledger.finance.dto.request.CreateVendorRequest;
 import com.kitchenledger.finance.exception.ConflictException;
 import com.kitchenledger.finance.exception.ResourceNotFoundException;
+import com.kitchenledger.finance.exception.ValidationException;
 import com.kitchenledger.finance.model.Vendor;
 import com.kitchenledger.finance.repository.VendorRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -75,6 +77,10 @@ public class VendorService {
     @Transactional
     public void delete(UUID tenantId, UUID id) {
         Vendor vendor = getById(tenantId, id);
+        if (vendor.getOutstandingBalance().compareTo(BigDecimal.ZERO) > 0) {
+            throw new ValidationException(
+                    "Cannot delete vendor with outstanding balance: " + vendor.getOutstandingBalance());
+        }
         vendor.setDeletedAt(Instant.now());
         vendor.setActive(false);
         vendorRepository.save(vendor);

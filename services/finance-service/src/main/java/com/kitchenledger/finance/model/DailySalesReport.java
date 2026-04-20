@@ -118,4 +118,11 @@ public class DailySalesReport {
     void onUpdate() {
         updatedAt = Instant.now();
     }
+
+    /** Average spend per cover. Returns ZERO when no covers recorded. */
+    public BigDecimal getAverageCheckSize() {
+        if (coversCount <= 0) return BigDecimal.ZERO;
+        return grossSales.divide(
+                java.math.BigDecimal.valueOf(coversCount), 2, java.math.RoundingMode.HALF_UP);
+    }
 }

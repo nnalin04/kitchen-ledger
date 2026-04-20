@@ -41,7 +41,8 @@ public class StockCountService {
         UUID tenantId = UUID.fromString(TenantContext.get());
         UUID userId = UUID.fromString(TenantContext.getUserId());
 
-        AbcCategory abcFilter = request.getAbcFilter() != null ? AbcCategory.fromValue(request.getAbcFilter()) : null;
+        AbcCategory abcFilter = request.getAbcFilter() != null
+                ? AbcCategory.valueOf(request.getAbcFilter().toUpperCase()) : null;
         CountType type = CountType.fromValue(request.getCountType());
 
         if (type == null) {
@@ -86,7 +87,7 @@ public class StockCountService {
         UUID tenantId = UUID.fromString(TenantContext.get());
 
         for (CountItemRequest reqItem : request.getItems()) {
-            InventoryItem item = itemRepository.findByIdAndTenantId(reqItem.getInventoryItemId(), tenantId)
+            InventoryItem item = itemRepository.findByIdAndTenantIdAndDeletedAtIsNull(reqItem.getInventoryItemId(), tenantId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found: " + reqItem.getInventoryItemId()));
 
             InventoryCountItem countItem = InventoryCountItem.builder()
@@ -144,8 +145,8 @@ public class StockCountService {
         // Publish event for completed count.
         // Alert on variance cost if it's significant (e.g. over $100 discrepency either direction).
         if (totalVarianceCost.abs().compareTo(new BigDecimal("100")) > 0) {
-            // Publisher handles finance events
-            eventPublisher.publishInventoryAdjusted(tenantId, countId, totalVarianceCost, "Count variance exceeding threshold");
+            log.info("Count {} completed with variance cost {} for tenant {}",
+                    countId, totalVarianceCost, tenantId);
         }
         
         return mapToResponse(count);
@@ -187,7 +188,7 @@ public class StockCountService {
         return InventoryCountResponse.builder()
                 .id(count.getId())
                 .countType(count.getCountType().getValue())
-                .abcFilter(count.getAbcFilter() != null ? count.getAbcFilter().getValue() : null)
+                .abcFilter(count.getAbcFilter() != null ? count.getAbcFilter().name() : null)
                 .status(count.getStatus().getValue())
                 .countDate(count.getCountDate())
                 .startedAt(count.getStartedAt())

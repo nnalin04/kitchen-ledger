@@ -14,6 +14,9 @@ class PnlSummary(BaseModel):
     net_sales: Decimal
     total_expenses: Decimal
     net_profit: Decimal
+    food_cost_percentage: Decimal
+    labor_cost_percentage: Decimal
+    prime_cost_percentage: Decimal
     expense_breakdown: list[dict[str, Any]]
 
 
@@ -32,6 +35,8 @@ class WasteReport(BaseModel):
     from_date: date
     to_date: date
     total_waste_cost: Decimal
+    category_breakdown: list[dict[str, Any]]
+    trend_by_weekday: list[dict[str, Any]]
     items: list[WasteItem]
 
 
@@ -69,13 +74,30 @@ class StaffHoursReport(BaseModel):
 
 # ── Async report job ───────────────────────────────────────────────────────
 
-VALID_REPORT_TYPES = {"pnl", "waste", "expenses", "staff-hours"}
+VALID_REPORT_TYPES = {
+    "pnl",
+    "waste",
+    "expenses",
+    "staff-hours",
+    "inventory-variance",
+    "food-cost-by-category",
+    "labor-cost",
+    "menu-engineering",
+    "vendor-spend",
+    "splh",
+    "employee-performance",
+    "audit-log",
+}
 
 
 class ReportJobRequest(BaseModel):
     report_type: str = Field(
         ...,
-        description="One of: pnl, waste, expenses, staff-hours",
+        description=(
+            "One of: pnl, waste, expenses, staff-hours, inventory-variance, "
+            "food-cost-by-category, labor-cost, menu-engineering, vendor-spend, "
+            "splh, employee-performance, audit-log"
+        ),
     )
     parameters: dict[str, str] = Field(
         default_factory=dict,

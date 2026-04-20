@@ -53,7 +53,7 @@ public class StockTransferService {
                 .build();
 
         for (TransferItemRequest itemReq : request.getItems()) {
-            InventoryItem item = itemRepository.findByIdAndTenantId(itemReq.getInventoryItemId(), tenantId)
+            InventoryItem item = itemRepository.findByIdAndTenantIdAndDeletedAtIsNull(itemReq.getInventoryItemId(), tenantId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found: " + itemReq.getInventoryItemId()));
 
             StockTransferItem transferItem = StockTransferItem.builder()
