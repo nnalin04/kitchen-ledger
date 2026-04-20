@@ -42,9 +42,24 @@ public class InventoryEventListener {
         UUID tenantId  = UUID.fromString(envelope.getTenantId());
         UUID receiptId = UUID.fromString(referenceIdStr);
 
+        // Prefer top-level line_items (v2 flat format); fall back to result.line_items (v1 legacy)
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> lineItems =
-                (List<Map<String, Object>>) payload.getOrDefault("line_items", List.of());
+        List<Map<String, Object>> topLevel = (List<Map<String, Object>>) payload.get("line_items");
+
+        final List<Map<String, Object>> lineItems;
+        if (topLevel != null) {
+            lineItems = topLevel;
+        } else {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> resultMap = (Map<String, Object>) payload.get("result");
+            if (resultMap != null) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> nested = (List<Map<String, Object>>) resultMap.get("line_items");
+                lineItems = nested != null ? nested : List.of();
+            } else {
+                lineItems = List.of();
+            }
+        }
 
         log.info("InventoryEventListener: prefilling receipt {} from OCR (doc_type={}, {} line items)",
                 receiptId, docType, lineItems.size());

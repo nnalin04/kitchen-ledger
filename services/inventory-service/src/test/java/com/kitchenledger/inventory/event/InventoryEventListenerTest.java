@@ -111,6 +111,45 @@ class InventoryEventListenerTest {
         verify(stockReceiptService).prefillFromOcr(eq(tenantId), eq(receiptId), eq(List.of()));
     }
 
+    // ── backward-compat: line_items nested inside result (old AI format) ─────
+
+    @Test
+    void onOcrCompleted_lineItemsNestedInResult_extractsAndCallsPrefill() {
+        // Old format before CRIT-03 fix: line_items inside result, not top-level
+        Map<String, Object> result = Map.of(
+                "provider", "mindee",
+                "line_items", List.of(Map.of("description", "Onion", "quantity", "10"))
+        );
+        EventEnvelope envelope = EventEnvelope.builder()
+                .eventType("ai.ocr.completed")
+                .tenantId(tenantId.toString())
+                .payload(Map.of(
+                        "document_type", "delivery_note",
+                        "reference_id",  receiptId.toString(),
+                        "result",        result
+                        // no top-level line_items
+                ))
+                .build();
+
+        inventoryEventListener.onEvent(envelope);
+
+        verify(stockReceiptService).prefillFromOcr(eq(tenantId), eq(receiptId), anyList());
+    }
+
+    @Test
+    void onOcrCompleted_malformedPayload_noReferenceAndNoLineItems_skipsWithLog() {
+        // Completely empty payload — should not throw, just skip
+        EventEnvelope envelope = EventEnvelope.builder()
+                .eventType("ai.ocr.completed")
+                .tenantId(tenantId.toString())
+                .payload(Map.of("document_type", "delivery_note"))
+                .build();
+
+        inventoryEventListener.onEvent(envelope);
+
+        verify(stockReceiptService, never()).prefillFromOcr(any(), any(), any());
+    }
+
     // ── unknown event ─────────────────────────────────────────────────────────
 
     @Test

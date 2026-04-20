@@ -27,6 +27,29 @@ def _get_job(db, job_id: str) -> AiJob:
     return job
 
 
+def _build_ocr_completed_payload(
+    *,
+    job_id: str,
+    file_upload_id: str | None,
+    reference_id: str | None,
+    document_type: str | None,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the ai.ocr.completed event payload with a versioned, flat contract.
+
+    Inventory listener requires `reference_id`, `document_type`, and `line_items`
+    at the top level.  `result` is kept nested for auditability and other consumers.
+    """
+    return {
+        "job_id":         job_id,
+        "file_upload_id": file_upload_id,
+        "reference_id":   reference_id,
+        "document_type":  document_type,
+        "line_items":     result.get("line_items") or [],
+        "result":         result,
+    }
+
+
 def _mark_processing(db, job: AiJob) -> None:
     job.status = "processing"
     db.commit()
@@ -89,12 +112,13 @@ def process_ocr(self, job_id: str, file_url: str, tenant_id: str):
         publish_event(
             "ai.ocr.completed",
             tenant_id,
-            {
-                "job_id": job_id,
-                "file_upload_id": job.input_data.get("file_upload_id"),
-                "document_type": job.input_data.get("document_type"),
-                "result": result,
-            },
+            _build_ocr_completed_payload(
+                job_id=job_id,
+                file_upload_id=job.input_data.get("file_upload_id"),
+                reference_id=job.input_data.get("reference_id"),
+                document_type=job.input_data.get("document_type"),
+                result=result,
+            ),
         )
         logger.info("OCR task completed: job_id=%s", job_id)
 
