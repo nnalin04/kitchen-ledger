@@ -181,7 +181,7 @@ PO status enum includes full lifecycle, but service logic skips `partial` and `c
 
 ---
 
-## [ ] HIGH-02 — Implement PAR formula and auto-suggested PO generation
+## [x] HIGH-02 — Implement PAR formula and auto-suggested PO generation
 
 **What this fixes**
 Low stock detection exists, but PRD-required PAR formula and auto-order suggestion are not implemented end-to-end.
@@ -206,7 +206,7 @@ Low stock detection exists, but PRD-required PAR formula and auto-order suggesti
 
 ---
 
-## [ ] HIGH-03 — Enforce FEFO (not FIFO) for perishable inventory consumption
+## [x] HIGH-03 — Enforce FEFO (not FIFO) for perishable inventory consumption
 
 **What this fixes**
 Perishable deduction currently lacks explicit FEFO allocation guarantees.
