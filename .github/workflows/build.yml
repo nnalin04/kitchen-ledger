@@ -41,6 +41,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+          # :latest is intentionally omitted — production deployments MUST reference
+          # immutable SHA tags. A release workflow can promote :latest explicitly.
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/${{ matrix.service }}:cache
           cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/${{ matrix.service }}:cache,mode=max
