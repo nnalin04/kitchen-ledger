@@ -20,6 +20,30 @@ async function pingService(url: string, name: string): Promise<ServiceStatus> {
 }
 
 export async function registerHealthRoutes(app: FastifyInstance): Promise<void> {
+  /**
+   * Readiness probe — 200 when this gateway can accept traffic.
+   * Checks Redis (session store) and auth service (JWT verification dependency).
+   * Distinct from /health: /health is liveness, /ready is readiness.
+   */
+  app.get('/ready', async (_req, reply) => {
+    let redisOk = false;
+    try {
+      await redisClient.ping();
+      redisOk = true;
+    } catch { /* not ready */ }
+
+    const authStatus = await pingService(config.AUTH_SERVICE_URL, 'auth');
+    const ready = redisOk && authStatus.status === 'ok';
+
+    return reply.code(ready ? 200 : 503).send({
+      ready,
+      checks: {
+        redis: redisOk ? 'ok' : 'error',
+        auth:  authStatus.status,
+      },
+    });
+  });
+
   app.get('/health', async (_req, reply) => {
     const [auth, inventory, finance, staff, ai, file, notification, report] =
       await Promise.all([

@@ -55,11 +55,34 @@ async def generic_exception_handler(request: Request, exc: Exception):
     )
 
 
-# ── Health ─────────────────────────────────────────────────────────────────
+# ── Health / Readiness ─────────────────────────────────────────────────────
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "report-service"}
+
+
+@app.get("/ready")
+async def ready():
+    """Readiness probe — checks DB connectivity before serving traffic."""
+    checks: dict[str, str] = {}
+
+    try:
+        import psycopg2
+        from app.core.config import settings
+        conn = psycopg2.connect(settings.database_url, connect_timeout=3)
+        conn.close()
+        checks["db"] = "ok"
+    except Exception:
+        checks["db"] = "error"
+
+    all_ok = all(v == "ok" for v in checks.values())
+    from fastapi import Response
+    return Response(
+        content=__import__("json").dumps({"ready": all_ok, "checks": checks}),
+        status_code=200 if all_ok else 503,
+        media_type="application/json",
+    )
 
 
 # ── Routers ────────────────────────────────────────────────────────────────

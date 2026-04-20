@@ -56,11 +56,46 @@ async def generic_exception_handler(request: Request, exc: Exception):
     )
 
 
-# ── Health ─────────────────────────────────────────────────────────────────
+# ── Health / Readiness ─────────────────────────────────────────────────────
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "ai-service"}
+
+
+@app.get("/ready")
+async def ready():
+    """Readiness probe — checks DB and Redis connectivity before serving traffic."""
+    from app.core.database import SessionLocal
+    from app.core.config import settings
+    import redis as redis_lib
+
+    checks: dict[str, str] = {}
+
+    # DB check
+    try:
+        db = SessionLocal()
+        db.execute(__import__("sqlalchemy").text("SELECT 1"))
+        db.close()
+        checks["db"] = "ok"
+    except Exception:
+        checks["db"] = "error"
+
+    # Redis check
+    try:
+        r = redis_lib.from_url(settings.redis_url, socket_connect_timeout=2)
+        r.ping()
+        checks["redis"] = "ok"
+    except Exception:
+        checks["redis"] = "error"
+
+    all_ok = all(v == "ok" for v in checks.values())
+    from fastapi import Response
+    return Response(
+        content=__import__("json").dumps({"ready": all_ok, "checks": checks}),
+        status_code=200 if all_ok else 503,
+        media_type="application/json",
+    )
 
 
 # ── Routers ────────────────────────────────────────────────────────────────

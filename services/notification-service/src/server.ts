@@ -30,11 +30,22 @@ async function bootstrap(): Promise<void> {
     });
   });
 
-  // Health endpoint
+  // Health endpoint (liveness)
   app.get('/health', async () => ({
     status: 'ok',
     service: 'notification-service',
   }));
+
+  // Readiness probe — checks DB connectivity
+  app.get('/ready', async (_req, reply) => {
+    const { pool } = await import('./db');
+    try {
+      await pool.query('SELECT 1');
+      return reply.code(200).send({ ready: true, checks: { db: 'ok' } });
+    } catch {
+      return reply.code(503).send({ ready: false, checks: { db: 'error' } });
+    }
+  });
 
   // REST API routes
   await registerNotificationRoutes(app);
