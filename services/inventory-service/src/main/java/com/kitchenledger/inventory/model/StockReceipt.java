@@ -66,6 +66,11 @@ public class StockReceipt {
     @Column(name = "confirmed_at")
     private Instant confirmedAt;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private int version = 0;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

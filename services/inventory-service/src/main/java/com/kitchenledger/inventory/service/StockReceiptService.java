@@ -16,13 +16,12 @@ import com.kitchenledger.inventory.repository.InventoryMovementRepository;
 import com.kitchenledger.inventory.repository.StockReceiptItemRepository;
 import com.kitchenledger.inventory.repository.StockReceiptRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
@@ -165,9 +164,14 @@ public class StockReceiptService {
         receipt.setThreeWayMatchStatus(
                 anyDiscrepancy ? ThreeWayMatchStatus.discrepancy : ThreeWayMatchStatus.matched);
 
-        StockReceipt saved = receiptRepository.save(receipt);
-        eventPublisher.publishReceiptConfirmed(tenantId, saved.getId(), saved.getSupplierId());
-        return saved;
+        try {
+            StockReceipt saved = receiptRepository.save(receipt);
+            eventPublisher.publishReceiptConfirmed(tenantId, saved.getId(), saved.getSupplierId());
+            return saved;
+        } catch (OptimisticLockingFailureException e) {
+            throw new ConflictException(
+                    "concurrent confirm: receipt " + id + " was already confirmed by another request");
+        }
     }
 
     /**
