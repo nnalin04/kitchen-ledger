@@ -1,16 +1,34 @@
 import { config } from '../config';
 
+const INTERNAL_HEADERS = {
+  'X-Internal-Service-Secret': config.INTERNAL_SERVICE_SECRET,
+  'Content-Type': 'application/json',
+};
+
 /**
- * Internal HTTP client for Auth Service.
- * Used to resolve users by role for targeted push notifications.
+ * Resolves active users for a tenant filtered by role(s).
+ * Called by dispatcher fan-out to determine push recipients.
  */
 export async function getUsersByRole(
   tenantId: string,
   roles: string[]
 ): Promise<Array<{ id: string; email: string; role: string }>> {
-  // For Phase 2 (email-only events) the caller already has user info in payload.
-  // This is a placeholder for Phase 4 when push events need role-based fan-out.
-  return [];
+  try {
+    const params = new URLSearchParams({ tenantId, roles: roles.join(',') });
+    const res = await fetch(
+      `${config.AUTH_SERVICE_URL}/internal/auth/users?${params}`,
+      { headers: INTERNAL_HEADERS }
+    );
+    if (!res.ok) {
+      console.error('getUsersByRole failed', { status: res.status, tenantId, roles });
+      return [];
+    }
+    const body = await res.json() as { success: boolean; data: Array<{ id: string; email: string; role: string }> };
+    return body.data ?? [];
+  } catch (err) {
+    console.error('getUsersByRole error', err);
+    return [];
+  }
 }
 
 export async function getUserById(

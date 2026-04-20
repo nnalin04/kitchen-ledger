@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -73,6 +74,20 @@ public class InternalAuthController {
         checkInternalSecret(request);
         UserResponse user = userService.getById(userId);
         return ResponseEntity.ok(Map.of("success", true, "data", user));
+    }
+
+    /**
+     * Used by notification-service to resolve push recipients by tenant + role.
+     * roles param is comma-separated, e.g. ?tenantId=...&roles=owner,manager
+     */
+    @GetMapping("/users")
+    public ResponseEntity<Map<String, Object>> getUsersByTenantAndRoles(
+            @RequestParam UUID tenantId,
+            @RequestParam(defaultValue = "owner,manager") List<String> roles,
+            HttpServletRequest request) {
+        checkInternalSecret(request);
+        var users = userService.listByTenantAndRoles(tenantId, roles);
+        return ResponseEntity.ok(Map.of("success", true, "data", users));
     }
 
     private void checkInternalSecret(HttpServletRequest request) {

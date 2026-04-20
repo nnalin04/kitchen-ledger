@@ -5,6 +5,7 @@ import {
   dispatchWelcomeEmail,
   dispatchInvitationEmail,
   dispatch,
+  dispatchToTenantRecipients,
 } from '../providers/dispatcher';
 
 const EXCHANGE   = 'kitchenledger.events';
@@ -34,9 +35,10 @@ let connection: Connection | null = null;
 let channel: Channel | null = null;
 
 const EventEnvelopeSchema = z.object({
+  event_id:   z.string().default(() => crypto.randomUUID()),
   event_type: z.string().min(1),
-  tenant_id: z.string().min(1),
-  payload: z.record(z.string(), z.unknown()).default({}),
+  tenant_id:  z.string().min(1),
+  payload:    z.record(z.string(), z.unknown()).default({}),
 });
 
 function normalizeEnvelope(raw: unknown) {
@@ -45,9 +47,10 @@ function normalizeEnvelope(raw: unknown) {
   }
   const obj = raw as Record<string, unknown>;
   const normalized = {
+    event_id:   obj.event_id   ?? obj.eventId,
     event_type: obj.event_type ?? obj.eventType,
-    tenant_id: obj.tenant_id ?? obj.tenantId,
-    payload: obj.payload,
+    tenant_id:  obj.tenant_id  ?? obj.tenantId,
+    payload:    obj.payload,
   };
   return EventEnvelopeSchema.parse(normalized);
 }
@@ -72,7 +75,7 @@ export async function startEventConsumer(): Promise<void> {
       const rawEvent = JSON.parse(msg.content.toString()) as unknown;
       const event = normalizeEnvelope(rawEvent);
 
-      await handleEvent(event.event_type, event.tenant_id, event.payload);
+      await handleEvent(event.event_id, event.event_type, event.tenant_id, event.payload);
       channel!.ack(msg);
     } catch (err) {
       console.error('Failed to process event envelope', {
@@ -96,6 +99,7 @@ export async function startEventConsumer(): Promise<void> {
 }
 
 async function handleEvent(
+  eventId: string,
   eventType: string,
   tenantId: string,
   payload: Record<string, any>
@@ -124,181 +128,152 @@ async function handleEvent(
       break;
 
     case 'inventory.stock.low':
-      await dispatch({
-        tenantId,
-        userId: null, // fan-out to owner/manager handled in Phase 4
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'important',
-        title: 'Low Stock Alert',
-        body: `${payload.item_name} is running low (${payload.current_stock} ${payload.unit} remaining)`,
-        data: payload,
-        channels: ['push'],
+        title:    'Low Stock Alert',
+        body:     `${payload.item_name} is running low (${payload.current_stock} ${payload.unit} remaining)`,
+        data:     payload,
       });
       break;
 
     case 'inventory.stock.expiring':
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'important',
-        title: 'Item Expiring Soon',
-        body: `${payload.item_name} expires in ${payload.days_remaining} day(s)`,
-        data: payload,
-        channels: ['push'],
+        title:    'Item Expiring Soon',
+        body:     `${payload.item_name} expires in ${payload.days_remaining} day(s)`,
+        data:     payload,
       });
       break;
 
     case 'inventory.po.sent':
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'informational',
-        title: 'Purchase Order Sent',
-        body: `PO ${payload.po_number} sent via ${payload.sent_via} (total: ${payload.total_amount})`,
-        data: payload,
-        channels: ['push'],
+        title:    'Purchase Order Sent',
+        body:     `PO ${payload.po_number} sent via ${payload.sent_via} (total: ${payload.total_amount})`,
+        data:     payload,
       });
       break;
 
     case 'inventory.price.alert':
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'important',
-        title: 'Price Alert',
-        body: `${payload.item_name} price changed by ${payload.delta_percent}% → ${payload.new_price}`,
-        data: payload,
-        channels: ['push'],
+        title:    'Price Alert',
+        body:     `${payload.item_name} price changed by ${payload.delta_percent}% → ${payload.new_price}`,
+        data:     payload,
       });
       break;
 
     case 'finance.payment.overdue':
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'critical',
-        title: 'Payment Overdue',
-        // publisher sends vendor_id not vendor_name; fall back gracefully
-        body: `Payment (vendor: ${payload.vendor_id}) is overdue — ${payload.currency} ${payload.amount}`,
-        data: payload,
-        channels: ['push', 'email'],
+        title:    'Payment Overdue',
+        body:     `Payment (vendor: ${payload.vendor_id}) is overdue — ${payload.currency} ${payload.amount}`,
+        data:     payload,
       });
       break;
 
     case 'finance.dsr.reconciled':
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'informational',
-        title: 'Daily Report Reconciled',
-        // publisher sends report_date (not date); support both during rollout
-        body: `Sales report for ${payload.report_date ?? payload.date} reconciled. Net: ${payload.currency} ${payload.net_sales}`,
-        data: payload,
-        channels: ['push'],
+        title:    'Daily Report Reconciled',
+        body:     `Sales report for ${payload.report_date ?? payload.date} reconciled. Net: ${payload.currency} ${payload.net_sales}`,
+        data:     payload,
       });
       break;
 
     case 'staff.employee.hired':
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'informational',
-        title: 'New Team Member',
-        body: `${payload.full_name} has been added as ${payload.role}. Complete their onboarding profile.`,
-        data: payload,
-        channels: ['push'],
+        title:    'New Team Member',
+        body:     `${payload.full_name} has been added as ${payload.role}. Complete their onboarding profile.`,
+        data:     payload,
       });
       break;
 
     case 'report.generated':
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'informational',
-        title: 'Your Report is Ready',
-        body: `${payload.report_name} has been generated and is ready to download`,
-        data: payload,
-        channels: ['push'],
+        title:    'Your Report is Ready',
+        body:     `${payload.report_name} has been generated and is ready to download`,
+        data:     payload,
       });
       break;
 
     case 'staff.employee.noshow':
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'important',
-        title: 'Employee No-Show',
-        body: `${payload.employee_name} did not clock in for their ${payload.shift_start} shift on ${payload.shift_date}.`,
-        data: payload,
-        channels: ['push'],
+        title:    'Employee No-Show',
+        body:     `${payload.employee_name} did not clock in for their ${payload.shift_start} shift on ${payload.shift_date}.`,
+        data:     payload,
       });
       break;
 
     case 'staff.overtime.approaching':
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'important',
-        title: 'Overtime Alert',
-        body: `${payload.employee_name} has worked ${payload.hours_this_week}h this week. Overtime in ${payload.hours_until_overtime}h.`,
-        data: payload,
-        channels: ['push'],
+        title:    'Overtime Alert',
+        body:     `${payload.employee_name} has worked ${payload.hours_this_week}h this week. Overtime in ${payload.hours_until_overtime}h.`,
+        data:     payload,
       });
       break;
 
     case 'finance.expense.created':
-      // Audit log — no push notification by default; extend later for budget alerts
       console.info('Expense created event received for tenant', tenantId);
       break;
 
     case 'inventory.receipt.confirmed':
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'informational',
-        title: 'Delivery Confirmed',
-        body: `Stock receipt confirmed. Inventory has been updated.`,
-        data: payload,
-        channels: ['push'],
+        title:    'Delivery Confirmed',
+        body:     'Stock receipt confirmed. Inventory has been updated.',
+        data:     payload,
       });
       break;
 
     case 'finance.cash.discrepancy': {
       const direction = payload.variance_direction === 'SHORT' ? 'SHORT' : 'OVER';
       const amount    = Math.abs(parseFloat(payload.variance ?? '0')).toFixed(2);
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'critical',
-        title: `Cash ${direction} — ₹${amount}`,
-        body: `Today's cash count is ₹${amount} ${direction.toLowerCase()}. Immediate review required.`,
-        data: payload,
-        channels: ['push'],
+        title:    `Cash ${direction} — ₹${amount}`,
+        body:     `Today's cash count is ₹${amount} ${direction.toLowerCase()}. Immediate review required.`,
+        data:     payload,
       });
       break;
     }
 
     case 'staff.certification.expiring':
-      await dispatch({
-        tenantId,
-        userId: null,
-        type: eventType,
+      await dispatchToTenantRecipients(tenantId, {
+        eventId:  eventId,
+        type:     eventType,
         priority: 'important',
-        title: 'Certification Expiring Soon',
-        body: `${payload.employee_name}'s ${payload.cert_name} expires on ${payload.expiry_date}`,
-        data: payload,
-        channels: ['push'],
+        title:    'Certification Expiring Soon',
+        body:     `${payload.employee_name}'s ${payload.cert_name} expires on ${payload.expiry_date}`,
+        data:     payload,
       });
       break;
 

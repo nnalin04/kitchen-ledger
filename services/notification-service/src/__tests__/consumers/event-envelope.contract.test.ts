@@ -33,13 +33,14 @@ vi.mock('amqplib', () => ({
 }));
 
 vi.mock('../../providers/dispatcher', () => ({
-  dispatchWelcomeEmail: vi.fn().mockResolvedValue(undefined),
-  dispatchInvitationEmail: vi.fn().mockResolvedValue(undefined),
-  dispatch: vi.fn().mockResolvedValue(undefined),
+  dispatchWelcomeEmail:        vi.fn().mockResolvedValue(undefined),
+  dispatchInvitationEmail:     vi.fn().mockResolvedValue(undefined),
+  dispatch:                    vi.fn().mockResolvedValue(undefined),
+  dispatchToTenantRecipients:  vi.fn().mockResolvedValue({ attempted: 0, sent: 0, skipped: 0 }),
 }));
 
 import { startEventConsumer, stopEventConsumer } from '../../consumers/event.consumer';
-import { dispatchWelcomeEmail, dispatch } from '../../providers/dispatcher';
+import { dispatchWelcomeEmail, dispatch, dispatchToTenantRecipients } from '../../providers/dispatcher';
 
 async function emitEnvelope(envelope: Record<string, unknown>) {
   const handler = mockConsume.mock.calls[0][1] as (msg: unknown) => Promise<void>;
@@ -107,7 +108,10 @@ describe('event envelope contract', () => {
       },
     });
 
-    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'inventory.stock.low' }));
+    expect(dispatchToTenantRecipients).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ type: 'inventory.stock.low' })
+    );
     expect(mockAck).toHaveBeenCalledOnce();
     expect(mockNack).not.toHaveBeenCalled();
   });
@@ -124,8 +128,12 @@ describe('event envelope contract', () => {
       payload: { employee_name: 'Sam', shift_start: '17:00', shift_date: '2026-04-20' },
     });
 
-    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'finance.cash.discrepancy' }));
-    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'staff.employee.noshow' }));
+    expect(dispatchToTenantRecipients).toHaveBeenCalledWith(
+      'tenant-3', expect.objectContaining({ type: 'finance.cash.discrepancy' })
+    );
+    expect(dispatchToTenantRecipients).toHaveBeenCalledWith(
+      'tenant-3', expect.objectContaining({ type: 'staff.employee.noshow' })
+    );
     expect(mockNack).not.toHaveBeenCalled();
   });
 

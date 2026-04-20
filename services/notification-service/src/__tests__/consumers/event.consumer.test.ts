@@ -37,9 +37,10 @@ vi.mock('amqplib', () => ({
 // ── Mock dispatcher (we test routing, not the email/push logic) ───────────────
 
 vi.mock('../../providers/dispatcher', () => ({
-  dispatchWelcomeEmail:    vi.fn().mockResolvedValue(undefined),
-  dispatchInvitationEmail: vi.fn().mockResolvedValue(undefined),
-  dispatch:                vi.fn().mockResolvedValue(undefined),
+  dispatchWelcomeEmail:        vi.fn().mockResolvedValue(undefined),
+  dispatchInvitationEmail:     vi.fn().mockResolvedValue(undefined),
+  dispatch:                    vi.fn().mockResolvedValue(undefined),
+  dispatchToTenantRecipients:  vi.fn().mockResolvedValue({ attempted: 0, sent: 0, skipped: 0 }),
 }));
 
 // ── Imports ───────────────────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ import {
   dispatchWelcomeEmail,
   dispatchInvitationEmail,
   dispatch,
+  dispatchToTenantRecipients,
 } from '../../providers/dispatcher';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -130,6 +132,7 @@ describe('event routing', () => {
     vi.mocked(dispatchWelcomeEmail).mockResolvedValue(undefined);
     vi.mocked(dispatchInvitationEmail).mockResolvedValue(undefined);
     vi.mocked(dispatch).mockResolvedValue(undefined);
+    vi.mocked(dispatchToTenantRecipients).mockResolvedValue({ attempted: 0, sent: 0, skipped: 0 });
 
     await startEventConsumer();
   });
@@ -170,32 +173,31 @@ describe('event routing', () => {
     expect(mockAck).toHaveBeenCalledOnce();
   });
 
-  it('routes inventory.stock.low → dispatch() with push channel', async () => {
+  it('routes inventory.stock.low → dispatchToTenantRecipients() with important priority', async () => {
     await simulateMessage('inventory.stock.low', {
       item_name:     'Onions',
       current_stock: '2',
       unit:          'kg',
     });
 
-    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
-      type:     'inventory.stock.low',
-      priority: 'important',
-      channels: expect.arrayContaining(['push']),
-    }));
+    expect(dispatchToTenantRecipients).toHaveBeenCalledWith(
+      'tenant-123',
+      expect.objectContaining({ type: 'inventory.stock.low', priority: 'important' })
+    );
     expect(mockAck).toHaveBeenCalledOnce();
   });
 
-  it('routes finance.payment.overdue → dispatch() with critical priority', async () => {
+  it('routes finance.payment.overdue → dispatchToTenantRecipients() with critical priority', async () => {
     await simulateMessage('finance.payment.overdue', {
       vendor_name: 'Fresh Farms Co.',
       amount:      '45000',
       currency:    '₹',
     });
 
-    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
-      type:     'finance.payment.overdue',
-      priority: 'critical',
-    }));
+    expect(dispatchToTenantRecipients).toHaveBeenCalledWith(
+      'tenant-123',
+      expect.objectContaining({ type: 'finance.payment.overdue', priority: 'critical' })
+    );
     expect(mockAck).toHaveBeenCalledOnce();
   });
 

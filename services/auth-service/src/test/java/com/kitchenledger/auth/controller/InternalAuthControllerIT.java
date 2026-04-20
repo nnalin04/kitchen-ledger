@@ -134,6 +134,46 @@ class InternalAuthControllerIT extends AbstractIT {
                 .andExpect(status().isForbidden());
     }
 
+    // ── GET /internal/auth/users (fan-out recipient query) ───────────────────
+
+    @Test
+    void getUsersByTenantAndRoles_returnsOwnerForRegisteredTenant() throws Exception {
+        String email = uniqueEmail("fanout-owner");
+        Map<String, Object> data = registerAndGetData(email, "password123");
+        //noinspection unchecked
+        String tenantId = (String) ((Map<String, Object>) data.get("tenant")).get("id");
+
+        mockMvc.perform(get("/internal/auth/users")
+                        .param("tenantId", tenantId)
+                        .param("roles", "owner")
+                        .header("X-Internal-Service-Secret", INTERNAL_SECRET))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[0].role").value("owner"))
+                .andExpect(jsonPath("$.data[0].email").value(email));
+    }
+
+    @Test
+    void getUsersByTenantAndRoles_wrongSecret_returns403() throws Exception {
+        mockMvc.perform(get("/internal/auth/users")
+                        .param("tenantId", java.util.UUID.randomUUID().toString())
+                        .param("roles", "owner")
+                        .header("X-Internal-Service-Secret", "bad-secret"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getUsersByTenantAndRoles_unknownTenant_returnsEmptyList() throws Exception {
+        mockMvc.perform(get("/internal/auth/users")
+                        .param("tenantId", java.util.UUID.randomUUID().toString())
+                        .param("roles", "owner,manager")
+                        .header("X-Internal-Service-Secret", INTERNAL_SECRET))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
     // ── Full round-trip: register → verify token ──────────────────────────────
 
     @Test

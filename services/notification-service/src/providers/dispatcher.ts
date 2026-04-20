@@ -1,6 +1,7 @@
 import { pool } from '../db';
 import { sendEmail, welcomeEmail, invitationEmail } from './resend-email.provider';
 import { sendPush } from './expo-push.provider';
+import { getUsersByRole } from '../clients/auth.client';
 import { config } from '../config';
 
 export interface NotificationRecord {
@@ -12,6 +13,79 @@ export interface NotificationRecord {
   body: string;
   data: Record<string, unknown>;
   channels: string[];
+}
+
+export interface FanOutOptions {
+  eventId: string;
+  type: string;
+  priority: 'critical' | 'important' | 'informational';
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+  /** Roles to target — defaults to owner + manager for critical alerts */
+  roles?: string[];
+}
+
+export interface FanOutMetrics {
+  attempted: number;
+  sent: number;
+  skipped: number;
+}
+
+/**
+ * Fan-out a push notification to all active owners/managers of a tenant.
+ * Idempotent: duplicate deliveries of the same (eventId, userId) pair are
+ * detected via notification_dedup and silently skipped.
+ */
+export async function dispatchToTenantRecipients(
+  tenantId: string,
+  opts: FanOutOptions
+): Promise<FanOutMetrics> {
+  const roles = opts.roles ?? ['owner', 'manager'];
+  const recipients = await getUsersByRole(tenantId, roles);
+
+  const metrics: FanOutMetrics = { attempted: recipients.length, sent: 0, skipped: 0 };
+
+  for (const user of recipients) {
+    // Idempotency check — skip if this (eventId, userId) was already processed
+    const { rows: existing } = await pool.query<{ event_id: string }>(
+      `SELECT event_id FROM notification_dedup WHERE event_id = $1 AND user_id = $2`,
+      [opts.eventId, user.id]
+    );
+    if (existing.length > 0) {
+      metrics.skipped++;
+      continue;
+    }
+
+    // Persist notification record
+    await pool.query(
+      `INSERT INTO notifications
+         (tenant_id, user_id, type, priority, title, body, data, channels)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [tenantId, user.id, opts.type, opts.priority,
+       opts.title, opts.body, JSON.stringify(opts.data), JSON.stringify(['push'])]
+    );
+
+    // Record dedup entry before sending (prevents double-send on push failure + retry)
+    await pool.query(
+      `INSERT INTO notification_dedup (event_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [opts.eventId, user.id]
+    );
+
+    // Send push (non-fatal — token may not exist)
+    await sendPush({
+      userId: user.id,
+      title: opts.title,
+      body: opts.body,
+      data: opts.data,
+      priority: opts.priority,
+    }).catch(err => console.error('Fan-out push failed', { userId: user.id, err }));
+
+    metrics.sent++;
+  }
+
+  console.info('fan-out dispatch', { eventId: opts.eventId, type: opts.type, tenantId, ...metrics });
+  return metrics;
 }
 
 /**

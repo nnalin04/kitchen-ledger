@@ -5,6 +5,7 @@ import com.kitchenledger.auth.dto.request.UpdateUserRequest;
 import com.kitchenledger.auth.dto.response.UserResponse;
 import com.kitchenledger.auth.exception.ResourceNotFoundException;
 import com.kitchenledger.auth.model.User;
+import com.kitchenledger.auth.model.enums.UserRole;
 import com.kitchenledger.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -40,6 +41,17 @@ public class UserService {
     public Page<UserResponse> listByTenant(UUID tenantId, Pageable pageable) {
         return userRepository.findByTenantIdAndDeletedAtIsNull(tenantId, pageable)
                 .map(UserResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserResponse> listByTenantAndRoles(UUID tenantId, List<String> roleNames) {
+        List<UserRole> roles = roleNames.stream()
+                .map(r -> UserRole.valueOf(r.toLowerCase()))
+                .toList();
+        return userRepository.findByTenantIdAndRoleInAndActiveIsTrueAndDeletedAtIsNull(tenantId, roles)
+                .stream()
+                .map(UserResponse::from)
+                .toList();
     }
 
     @Transactional

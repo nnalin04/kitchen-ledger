@@ -1,6 +1,7 @@
 package com.kitchenledger.auth.repository;
 
 import com.kitchenledger.auth.model.User;
+import com.kitchenledger.auth.model.enums.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -27,4 +28,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     List<User> findByTenantIdAndDeletedAtIsNull(UUID tenantId);
 
     Page<User> findByTenantIdAndDeletedAtIsNull(UUID tenantId, Pageable pageable);
+
+    List<User> findByTenantIdAndRoleInAndActiveIsTrueAndDeletedAtIsNull(
+            UUID tenantId, List<UserRole> roles);
 }
