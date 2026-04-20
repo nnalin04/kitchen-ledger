@@ -171,6 +171,34 @@ public class InventoryEventPublisher {
         ));
     }
 
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public void publishPoStatusChanged(UUID tenantId, PurchaseOrder po,
+                                       com.kitchenledger.inventory.model.enums.PurchaseOrderStatus previousStatus,
+                                       com.kitchenledger.inventory.model.enums.PurchaseOrderStatus newStatus) {
+        Map<String, Object> payload = Map.of(
+                "po_id",           po.getId().toString(),
+                "po_number",       po.getPoNumber(),
+                "supplier_id",     po.getSupplierId().toString(),
+                "previous_status", previousStatus.name(),
+                "new_status",      newStatus.name()
+        );
+        publishEnvelope(tenantId, "inventory.po.status_changed", payload);
+    }
+
+    @Recover
+    public void recoverPublishPoStatusChanged(AmqpException ex, UUID tenantId, PurchaseOrder po,
+                                              com.kitchenledger.inventory.model.enums.PurchaseOrderStatus previousStatus,
+                                              com.kitchenledger.inventory.model.enums.PurchaseOrderStatus newStatus) {
+        log.error("CRITICAL: Event publish failed after 3 retries for inventory.po.status_changed. Saving to outbox.", ex);
+        saveToOutbox(tenantId, "inventory.po.status_changed", Map.of(
+                "po_id", po.getId().toString(), "previous_status", previousStatus.name(), "new_status", newStatus.name()
+        ));
+    }
+
     private void publishEnvelope(UUID tenantId, String eventType, Map<String, Object> payload) {
         EventEnvelope envelope = EventEnvelope.builder()
                 .eventId(UUID.randomUUID().toString())

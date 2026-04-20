@@ -1,6 +1,7 @@
 package com.kitchenledger.inventory.controller;
 
 import com.kitchenledger.inventory.dto.request.CreatePurchaseOrderRequest;
+import com.kitchenledger.inventory.dto.request.ReceiveLineItemRequest;
 import com.kitchenledger.inventory.dto.response.PurchaseOrderResponse;
 import com.kitchenledger.inventory.model.enums.PurchaseOrderStatus;
 import com.kitchenledger.inventory.security.GatewayTrustFilter;
@@ -16,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -76,6 +78,32 @@ public class PurchaseOrderController {
                                                          @PathVariable UUID id) {
         return ResponseEntity.ok(
                 PurchaseOrderResponse.from(poService.cancel(tenantId(req), id)));
+    }
+
+    /**
+     * Partial or full receipt of a PO.
+     * Body: list of { lineItemId, receivedQuantity } updates.
+     * Over-receipt is blocked; transitions to partial or received automatically.
+     */
+    @PostMapping("/{id}/receive")
+    @RequiresRole({"owner", "manager"})
+    public ResponseEntity<PurchaseOrderResponse> receive(
+            HttpServletRequest req,
+            @PathVariable UUID id,
+            @RequestBody @Valid List<ReceiveLineItemRequest> lineUpdates) {
+        return ResponseEntity.ok(
+                PurchaseOrderResponse.from(
+                        poService.receivePartial(tenantId(req), id, userId(req), lineUpdates)));
+    }
+
+    /** Closes a fully-received PO. Partial POs are rejected without override. */
+    @PostMapping("/{id}/close")
+    @RequiresRole({"owner", "manager"})
+    public ResponseEntity<PurchaseOrderResponse> close(
+            HttpServletRequest req,
+            @PathVariable UUID id) {
+        return ResponseEntity.ok(
+                PurchaseOrderResponse.from(poService.close(tenantId(req), id)));
     }
 
     @DeleteMapping("/{id}")
