@@ -54,6 +54,9 @@ public class Shift {
     @Builder.Default
     private boolean endsNextDay = false;
 
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 

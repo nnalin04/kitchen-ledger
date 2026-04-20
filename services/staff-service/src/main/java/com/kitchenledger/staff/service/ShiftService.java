@@ -163,6 +163,7 @@ public class ShiftService {
         if (shift.getStatus() == ShiftStatus.published || shift.getStatus() == ShiftStatus.confirmed) {
             throw new ValidationException("Cannot delete a published or confirmed shift.");
         }
-        shiftRepository.delete(shift);
+        shift.setDeletedAt(java.time.Instant.now());
+        shiftRepository.save(shift);
     }
 }
