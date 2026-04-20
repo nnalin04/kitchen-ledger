@@ -37,13 +37,19 @@ public class InventoryEventPublisher {
         backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
     )
     public void publishStockLow(UUID tenantId, InventoryItem item) {
-        Map<String, Object> payload = Map.of(
-                "item_id",       item.getId().toString(),
-                "item_name",     item.getName(),
-                "current_stock", item.getCurrentStock().toPlainString(),
-                "par_level",     item.getParLevel() != null ? item.getParLevel().toPlainString() : "0",
-                "unit",          item.getCountUnit()
-        );
+        publishStockLow(tenantId, item, null);
+    }
+
+    public void publishStockLow(UUID tenantId, InventoryItem item, UUID suggestionId) {
+        java.util.HashMap<String, Object> payload = new java.util.HashMap<>();
+        payload.put("item_id",       item.getId().toString());
+        payload.put("item_name",     item.getName());
+        payload.put("current_stock", item.getCurrentStock().toPlainString());
+        payload.put("par_level",     item.getParLevel() != null ? item.getParLevel().toPlainString() : "0");
+        payload.put("unit",          item.getCountUnit());
+        if (suggestionId != null) {
+            payload.put("suggestion_id", suggestionId.toString());
+        }
         publishEnvelope(tenantId, "inventory.stock.low", payload);
     }
 

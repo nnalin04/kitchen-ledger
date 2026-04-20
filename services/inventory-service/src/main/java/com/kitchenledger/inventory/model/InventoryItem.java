@@ -89,6 +89,14 @@ public class InventoryItem {
     @Builder.Default
     private BigDecimal safetyStock = BigDecimal.ZERO;
 
+    /** Average daily usage in recipe units — used to compute PAR level. */
+    @Column(name = "avg_daily_usage", precision = 12, scale = 4)
+    private BigDecimal avgDailyUsage;
+
+    /** Supplier lead time in days — used in PAR formula. */
+    @Column(name = "lead_time_days")
+    private Integer leadTimeDays;
+
     // ── Cost ─────────────────────────────────────────────────────
 
     @Column(name = "avg_cost", nullable = false, precision = 12, scale = 4)
