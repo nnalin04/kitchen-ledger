@@ -151,7 +151,7 @@ Several report types currently return partial/empty data because report-service 
 
 ## HIGH PRIORITY (core backend features incomplete vs PRD)
 
-## [ ] HIGH-01 — Complete Purchase Order lifecycle implementation (`draft -> sent -> partial -> received -> closed`)
+## [x] HIGH-01 — Complete Purchase Order lifecycle implementation (`draft -> sent -> partial -> received -> closed`)
 
 **What this fixes**
 PO status enum includes full lifecycle, but service logic skips `partial` and `closed`, causing workflow mismatch.
@@ -228,7 +228,7 @@ Perishable deduction currently lacks explicit FEFO allocation guarantees.
 
 ---
 
-## [ ] HIGH-04 — Staff scheduling rule completion (clopen, publish window, cross-midnight, no-show detection)
+## [x] HIGH-04 — Staff scheduling rule completion (clopen, publish window, cross-midnight, no-show detection)
 
 **What this fixes**
 Shift engine currently allows invalid operational scenarios and misses no-shows for published shifts.
@@ -260,7 +260,7 @@ Shift engine currently allows invalid operational scenarios and misses no-shows 
 
 ---
 
-## [ ] HIGH-05 — Expand Finance DSR model to PRD-required fields
+## [x] HIGH-05 — Expand Finance DSR model to PRD-required fields
 
 **What this fixes**
 Current DSR entity does not capture full PRD reconciliation and channel breakdown requirements.
@@ -287,7 +287,7 @@ Current DSR entity does not capture full PRD reconciliation and channel breakdow
 
 ---
 
-## [ ] HIGH-06 — Remove report-service no-op baseline migration ambiguity
+## [x] HIGH-06 — Remove report-service no-op baseline migration ambiguity
 
 **What this fixes**
 `0001_baseline` is still a no-op, making environment bootstrap and migration lineage ambiguous.
@@ -315,7 +315,7 @@ Current DSR entity does not capture full PRD reconciliation and channel breakdow
 
 ## MEDIUM PRIORITY (stability, operability, and CI hardening)
 
-## [ ] MED-01 — Add readiness endpoints (`/ready`) across backend services
+## [x] MED-01 — Add readiness endpoints (`/ready`) across backend services
 
 **What this fixes**
 Health checks exist, but readiness probes are missing; deploy orchestration cannot distinguish startup vs ready-to-serve.
@@ -339,7 +339,7 @@ Health checks exist, but readiness probes are missing; deploy orchestration cann
 
 ---
 
-## [ ] MED-02 — Add `.dockerignore` to all backend services
+## [x] MED-02 — Add `.dockerignore` to all backend services
 
 **What this fixes**
 No service-level `.dockerignore` files were found, increasing image bloat and risk of copying dev/test artifacts.
@@ -359,7 +359,7 @@ No service-level `.dockerignore` files were found, increasing image bloat and ri
 
 ---
 
-## [ ] MED-03 — Stop publishing mutable `:latest` images from main build workflow
+## [x] MED-03 — Stop publishing mutable `:latest` images from main build workflow
 
 **What this fixes**
 Mutable `latest` tags reduce rollback safety and reproducibility.
@@ -380,7 +380,7 @@ Mutable `latest` tags reduce rollback safety and reproducibility.
 
 ---
 
-## [ ] MED-04 — Add contract and end-to-end test coverage for cross-service event/report flows
+## [x] MED-04 — Add contract and end-to-end test coverage for cross-service event/report flows
 
 **What this fixes**
 Most failures above are integration-contract failures not caught by current tests.
