@@ -156,13 +156,26 @@ public class AuthEventPublisher {
     }
 
     private void saveToOutbox(UUID tenantId, String routingKey, Map<String, Object> payload) {
+        EventEnvelope envelope = EventEnvelope.builder()
+                .eventId(java.util.UUID.randomUUID().toString())
+                .eventType(routingKey)
+                .tenantId(tenantId.toString())
+                .producedBy("auth-service")
+                .producedAt(java.time.Instant.now().toString())
+                .version("1.0")
+                .payload(payload)
+                .build();
+        saveToOutbox(envelope, routingKey);
+    }
+
+    private void saveToOutbox(EventEnvelope envelope, String routingKey) {
         try {
-            String json = objectMapper.writeValueAsString(payload);
+            String json = objectMapper.writeValueAsString(envelope);
             outboxEventRepository.save(OutboxEvent.builder()
-                    .tenantId(tenantId)
+                    .tenantId(java.util.UUID.fromString(envelope.getTenantId()))
                     .routingKey(routingKey)
                     .payload(json)
-                    .failedAt(Instant.now())
+                    .failedAt(java.time.Instant.now())
                     .build());
         } catch (Exception saveEx) {
             log.error("FATAL: Could not save event to outbox either. Event LOST. Key={}", routingKey, saveEx);

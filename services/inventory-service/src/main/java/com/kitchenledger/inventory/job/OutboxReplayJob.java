@@ -1,7 +1,8 @@
 package com.kitchenledger.inventory.job;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kitchenledger.inventory.event.EventEnvelope;
 import com.kitchenledger.inventory.event.OutboxEvent;
 import com.kitchenledger.inventory.event.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +14,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -40,11 +40,21 @@ public class OutboxReplayJob {
 
         for (OutboxEvent event : pending) {
             try {
-                Map<String, Object> payload = objectMapper.readValue(
-                    event.getPayload(), new TypeReference<>() {});
-                rabbitTemplate.convertAndSend(exchange, event.getRoutingKey(), payload);
+                EventEnvelope envelope = objectMapper.readValue(event.getPayload(), EventEnvelope.class);
+
+                // Legacy guard: bare payload rows don't have event_type — mark permanently failed
+                if (envelope.getEventType() == null || envelope.getEventType().isBlank()) {
+                    event.setRetryCount(MAX_RETRY_COUNT);
+                    event.setLastError("legacy outbox row: payload missing event_type — cannot replay as valid envelope");
+                    log.error("Outbox replay skipped (legacy format) id={} key={}", event.getId(), event.getRoutingKey());
+                    outboxEventRepository.save(event);
+                    continue;
+                }
+
+                rabbitTemplate.convertAndSend(exchange, event.getRoutingKey(), envelope);
                 event.setReplayedAt(Instant.now());
-                log.info("Outbox replay success: key={} id={}", event.getRoutingKey(), event.getId());
+                log.info("Outbox replay success: key={} eventId={} outboxId={}",
+                        event.getRoutingKey(), envelope.getEventId(), event.getId());
             } catch (Exception e) {
                 event.setRetryCount(event.getRetryCount() + 1);
                 event.setLastError(e.getMessage());

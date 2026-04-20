@@ -182,10 +182,23 @@ public class StaffEventPublisher {
     }
 
     private void saveToOutbox(UUID tenantId, String routingKey, Map<String, Object> payload) {
+        EventEnvelope envelope = EventEnvelope.builder()
+                .eventId(UUID.randomUUID().toString())
+                .eventType(routingKey)
+                .tenantId(tenantId.toString())
+                .producedBy("staff-service")
+                .producedAt(Instant.now().toString())
+                .version("1.0")
+                .payload(payload)
+                .build();
+        saveToOutbox(envelope, routingKey);
+    }
+
+    private void saveToOutbox(EventEnvelope envelope, String routingKey) {
         try {
-            String json = objectMapper.writeValueAsString(payload);
+            String json = objectMapper.writeValueAsString(envelope);
             outboxEventRepository.save(OutboxEvent.builder()
-                    .tenantId(tenantId)
+                    .tenantId(UUID.fromString(envelope.getTenantId()))
                     .routingKey(routingKey)
                     .payload(json)
                     .failedAt(Instant.now())
