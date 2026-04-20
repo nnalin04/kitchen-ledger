@@ -33,6 +33,14 @@ public class StockReceiptItem {
     @Column(name = "received_quantity", nullable = false, precision = 12, scale = 4)
     private BigDecimal receivedQuantity;
 
+    /**
+     * Remaining stock in this batch.  Starts equal to receivedQuantity and is
+     * decremented by FEFO allocations (waste, recipe usage, transfers).
+     * When zero the batch is exhausted.
+     */
+    @Column(name = "remaining_quantity", nullable = false, precision = 12, scale = 4)
+    private BigDecimal remainingQuantity;
+
     @Column(name = "unit", nullable = false)
     private String unit;
 

@@ -16,6 +16,27 @@ public interface StockReceiptItemRepository extends JpaRepository<StockReceiptIt
     void deleteByStockReceiptId(UUID stockReceiptId);
 
     /**
+     * FEFO query: returns available batches for an item ordered by expiry date ascending
+     * (earliest-expiry first), with null-expiry batches at the end.
+     * Only includes batches from confirmed receipts with remaining_quantity > 0.
+     */
+    @Query("""
+            SELECT sri FROM StockReceiptItem sri
+            JOIN StockReceipt sr ON sr.id = sri.stockReceiptId
+            WHERE sr.tenantId = :tenantId
+              AND sri.inventoryItemId = :itemId
+              AND sr.confirmed = true
+              AND sri.remainingQuantity > 0
+            ORDER BY
+              CASE WHEN sri.expiryDate IS NULL THEN 1 ELSE 0 END,
+              sri.expiryDate ASC,
+              sr.confirmedAt ASC
+            """)
+    List<StockReceiptItem> findAvailableBatchesByItemFefo(
+            @Param("tenantId") UUID tenantId,
+            @Param("itemId") UUID itemId);
+
+    /**
      * Returns confirmed receipt items expiring on or before {@code threshold} for a specific tenant.
      * Used by ExpiryCheckJob for per-tenant queries.
      */

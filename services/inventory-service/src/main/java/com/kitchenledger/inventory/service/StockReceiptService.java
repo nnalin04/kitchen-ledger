@@ -62,6 +62,7 @@ public class StockReceiptService {
                         .inventoryItemId(li.getInventoryItemId())
                         .expectedQuantity(li.getExpectedQuantity())
                         .receivedQuantity(li.getReceivedQuantity())
+                        .remainingQuantity(li.getReceivedQuantity()) // FEFO: starts fully available
                         .unit(li.getUnit())
                         .unitCost(li.getUnitCost())
                         .expiryDate(li.getExpiryDate())
@@ -212,6 +213,7 @@ public class StockReceiptService {
                     .inventoryItemId(matched.getId())
                     .expectedQuantity(quantity)
                     .receivedQuantity(BigDecimal.ZERO)
+                    .remainingQuantity(BigDecimal.ZERO) // filled in when receipt is confirmed
                     .unit(matched.getPurchaseUnit())
                     .unitCost(unitCost)
                     .condition(StockItemCondition.good)

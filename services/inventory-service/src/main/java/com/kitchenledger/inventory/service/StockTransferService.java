@@ -36,6 +36,7 @@ public class StockTransferService {
     private final InventoryItemRepository itemRepository;
     private final InventoryMovementRepository movementRepository;
     private final InventoryEventPublisher eventPublisher;
+    private final FefoAllocationService fefoAllocationService;
 
     @Transactional
     public StockTransferResponse createTransfer(CreateTransferRequest request) {
@@ -117,6 +118,17 @@ public class StockTransferService {
             inventoryItem.setCurrentStock(
                     inventoryItem.getCurrentStock().subtract(transferItem.getQuantity()));
             itemRepository.save(inventoryItem);
+
+            // FEFO: allocate from earliest-expiry batch for perishable items
+            if (inventoryItem.isPerishable()) {
+                var allocations = fefoAllocationService.allocate(
+                        UUID.fromString(TenantContext.get()),
+                        inventoryItem.getId(),
+                        transferItem.getQuantity());
+                if (!allocations.isEmpty()) {
+                    fefoAllocationService.applyAllocations(allocations);
+                }
+            }
 
             // Append-only movement ledger — TRANSFER_OUT
             movementRepository.save(InventoryMovement.builder()

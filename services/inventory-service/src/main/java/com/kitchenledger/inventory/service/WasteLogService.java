@@ -11,6 +11,7 @@ import com.kitchenledger.inventory.repository.InventoryItemRepository;
 import com.kitchenledger.inventory.repository.InventoryMovementRepository;
 import com.kitchenledger.inventory.repository.WasteLogRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -18,16 +19,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class WasteLogService {
 
     private final WasteLogRepository wasteLogRepository;
     private final InventoryItemRepository itemRepository;
     private final InventoryMovementRepository movementRepository;
     private final InventoryEventPublisher eventPublisher;
+    private final FefoAllocationService fefoAllocationService;
 
     @Transactional(readOnly = true)
     public Page<WasteLog> list(UUID tenantId, Pageable pageable) {
@@ -54,6 +58,18 @@ public class WasteLogService {
         BigDecimal newStock = item.getCurrentStock().subtract(req.getQuantity());
         item.setCurrentStock(newStock.max(BigDecimal.ZERO));
         itemRepository.save(item);
+
+        // FEFO: if the item is perishable (or we have tracked batches), allocate from
+        // earliest-expiry batch first. Non-perishable items without batches are a no-op.
+        if (item.isPerishable()) {
+            List<FefoAllocationService.BatchAllocation> allocations =
+                    fefoAllocationService.allocate(tenantId, item.getId(), req.getQuantity());
+            if (!allocations.isEmpty()) {
+                fefoAllocationService.applyAllocations(allocations);
+            } else {
+                log.debug("No tracked batches for perishable item {} — FEFO allocation skipped", item.getId());
+            }
+        }
 
         // Movement ledger entry
         InventoryMovement movement = movementRepository.save(InventoryMovement.builder()
