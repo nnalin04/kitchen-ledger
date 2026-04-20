@@ -25,4 +25,6 @@ public class CreateShiftRequest {
     private String roleLabel;
     private String station;
     private String notes;
+    /** Set to true for cross-midnight shifts where end_time < start_time (e.g., 23:00-03:00). */
+    private boolean endsNextDay;
 }

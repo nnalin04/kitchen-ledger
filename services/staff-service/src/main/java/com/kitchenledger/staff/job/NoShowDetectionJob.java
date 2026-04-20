@@ -41,20 +41,22 @@ public class NoShowDetectionJob {
         LocalTime thresholdTime  = LocalTime.now().minusMinutes(15);
 
         List<Shift> overdueShifts = shiftRepository
-            .findByStatusAndShiftDateAndStartTimeBefore(
-                ShiftStatus.scheduled, today, thresholdTime);
+            .findByStatusInAndShiftDateAndStartTimeBefore(
+                List.of(ShiftStatus.scheduled, ShiftStatus.published, ShiftStatus.confirmed),
+                today, thresholdTime);
 
         if (overdueShifts.isEmpty()) return;
 
-        log.debug("No-show check: {} overdue scheduled shift(s) found", overdueShifts.size());
+        log.debug("No-show check: {} overdue live shift(s) found", overdueShifts.size());
 
         for (Shift shift : overdueShifts) {
             boolean hasClockedIn = attendanceRepository
                 .existsByShiftIdAndTenantId(shift.getId(), shift.getTenantId());
 
             if (!hasClockedIn) {
-                // Mark as no-show (add no_show to ShiftStatus enum if not present — see below)
-                log.warn("No-show detected: shift={} employee={} tenant={}",
+                shift.setStatus(ShiftStatus.no_show);
+                shiftRepository.save(shift);
+                log.warn("No-show detected and marked: shift={} employee={} tenant={}",
                     shift.getId(), shift.getEmployeeId(), shift.getTenantId());
 
                 Optional<Employee> employeeOpt = employeeRepository

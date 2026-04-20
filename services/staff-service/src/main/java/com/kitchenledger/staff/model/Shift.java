@@ -50,6 +50,10 @@ public class Shift {
     @Column(name = "notes")
     private String notes;
 
+    @Column(name = "ends_next_day", nullable = false)
+    @Builder.Default
+    private boolean endsNextDay = false;
+
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 

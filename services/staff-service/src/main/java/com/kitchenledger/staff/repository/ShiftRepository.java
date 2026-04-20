@@ -22,9 +22,13 @@ public interface ShiftRepository extends JpaRepository<Shift, UUID> {
     List<Shift> findByTenantIdAndEmployeeIdAndShiftDateBetween(
             UUID tenantId, UUID employeeId, LocalDate from, LocalDate to);
 
-    /** Used by no-show detection job: find all scheduled shifts for today that started before given time. */
+    /** Used by no-show detection job: find all live shifts for today that started before given time. */
     List<Shift> findByStatusAndShiftDateAndStartTimeBefore(
             ShiftStatus status, LocalDate shiftDate, LocalTime startTimeBefore);
+
+    /** Find all live (scheduled OR published OR confirmed) shifts for today that started before threshold. */
+    List<Shift> findByStatusInAndShiftDateAndStartTimeBefore(
+            List<ShiftStatus> statuses, LocalDate shiftDate, LocalTime startTimeBefore);
 
     /**
      * Check for overlapping shifts for the same employee on the same date.

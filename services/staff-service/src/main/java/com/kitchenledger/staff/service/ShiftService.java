@@ -12,12 +12,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class ShiftService {
+
+    /** Minimum rest gap between consecutive shifts before a clopen is flagged (hours). */
+    private static final int MIN_REST_HOURS = 8;
+    /** Minimum advance days required to publish a schedule without an override. */
+    private static final int MIN_PUBLISH_ADVANCE_DAYS = 14;
 
     private final ShiftRepository shiftRepository;
     private final StaffEventPublisher eventPublisher;
@@ -47,9 +55,14 @@ public class ShiftService {
 
     @Transactional
     public Shift create(UUID tenantId, UUID createdBy, CreateShiftRequest req) {
-        if (!req.getStartTime().isBefore(req.getEndTime())) {
-            throw new ValidationException("Shift start_time must be before end_time.");
+        boolean crossMidnight = req.isEndsNextDay();
+
+        // A non-cross-midnight shift must have startTime < endTime
+        if (!crossMidnight && !req.getStartTime().isBefore(req.getEndTime())) {
+            throw new ValidationException(
+                    "Shift end_time must be after start_time. For overnight shifts, set ends_next_day=true.");
         }
+
         // Overlap check: no two non-cancelled shifts for the same employee can overlap
         if (shiftRepository.existsByTenantIdAndEmployeeIdAndShiftDateAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
                 tenantId, req.getEmployeeId(), req.getShiftDate(),
@@ -58,12 +71,17 @@ public class ShiftService {
             throw new ValidationException(
                     "Employee already has an overlapping shift on " + req.getShiftDate());
         }
+
+        // Clopen prevention: check rest gap against adjacent shifts in a 2-day window
+        checkClopenRule(tenantId, req);
+
         Shift shift = Shift.builder()
                 .tenantId(tenantId)
                 .employeeId(req.getEmployeeId())
                 .shiftDate(req.getShiftDate())
                 .startTime(req.getStartTime())
                 .endTime(req.getEndTime())
+                .endsNextDay(crossMidnight)
                 .roleLabel(req.getRoleLabel())
                 .station(req.getStation())
                 .notes(req.getNotes())
@@ -82,9 +100,18 @@ public class ShiftService {
         return shiftRepository.save(shift);
     }
 
-    /** Publishes all scheduled shifts for the given date range, making them visible to employees. */
+    /** Publishes all scheduled shifts for the given date range, making them visible to employees.
+     *  Rejects if any shift starts within the minimum advance window (14 days by default). */
     @Transactional
     public int publish(UUID tenantId, LocalDate from, LocalDate to) {
+        LocalDate minAllowedStart = LocalDate.now().plusDays(MIN_PUBLISH_ADVANCE_DAYS);
+        if (from.isBefore(minAllowedStart)) {
+            throw new ValidationException(
+                    "Cannot publish schedules starting before " + minAllowedStart
+                    + ". Schedules must be published at least " + MIN_PUBLISH_ADVANCE_DAYS
+                    + " days in advance. Use force-publish override for urgent changes.");
+        }
+
         List<Shift> shifts = shiftRepository
                 .findByTenantIdAndShiftDateBetweenOrderByShiftDateAscStartTimeAsc(tenantId, from, to);
         int count = 0;
@@ -96,6 +123,38 @@ public class ShiftService {
             }
         }
         return count;
+    }
+
+    private void checkClopenRule(UUID tenantId, CreateShiftRequest req) {
+        LocalDate lookbackStart = req.getShiftDate().minusDays(1);
+        LocalDate lookbackEnd   = req.getShiftDate().plusDays(1);
+
+        List<Shift> adjacent = shiftRepository.findByTenantIdAndEmployeeIdAndShiftDateBetween(
+                tenantId, req.getEmployeeId(), lookbackStart, lookbackEnd);
+
+        LocalDateTime newShiftStart = req.getShiftDate().atTime(req.getStartTime());
+        LocalDateTime newShiftEnd = req.isEndsNextDay()
+                ? req.getShiftDate().plusDays(1).atTime(req.getEndTime())
+                : req.getShiftDate().atTime(req.getEndTime());
+
+        for (Shift existing : adjacent) {
+            if (existing.getStatus() == ShiftStatus.cancelled) continue;
+
+            LocalDateTime existingEnd = existing.isEndsNextDay()
+                    ? existing.getShiftDate().plusDays(1).atTime(existing.getEndTime())
+                    : existing.getShiftDate().atTime(existing.getEndTime());
+            LocalDateTime existingStart = existing.getShiftDate().atTime(existing.getStartTime());
+
+            long gapAfterExisting  = java.time.Duration.between(existingEnd, newShiftStart).toHours();
+            long gapBeforeExisting = java.time.Duration.between(newShiftEnd, existingStart).toHours();
+
+            if ((gapAfterExisting >= 0 && gapAfterExisting < MIN_REST_HOURS)
+                    || (gapBeforeExisting >= 0 && gapBeforeExisting < MIN_REST_HOURS)) {
+                throw new ValidationException(
+                        "Shift creates a clopen scenario: less than " + MIN_REST_HOURS
+                        + "h rest gap required between consecutive shifts.");
+            }
+        }
     }
 
     @Transactional

@@ -5,5 +5,6 @@ public enum ShiftStatus {
     published,
     confirmed,
     swapped,
+    no_show,
     cancelled
 }
