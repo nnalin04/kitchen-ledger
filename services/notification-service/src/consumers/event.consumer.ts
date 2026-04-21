@@ -8,6 +8,7 @@ import {
   dispatch,
   dispatchToTenantRecipients,
 } from '../providers/dispatcher';
+import { computeBackoffMs } from '../utils/backoff';
 
 const EXCHANGE   = 'kitchenledger.events';
 const QUEUE_NAME = 'notification-service';
@@ -57,12 +58,21 @@ function normalizeEnvelope(raw: unknown) {
   return EventEnvelopeSchema.parse(normalized);
 }
 
-export async function startEventConsumer(): Promise<void> {
+export async function startEventConsumer(attempt = 0): Promise<void> {
   connection = await amqplib.connect(config.RABBITMQ_URL);
+  // Reset attempt counter on successful connection
+  attempt = 0;
   channel    = await connection.createChannel();
 
   await channel.assertExchange(EXCHANGE, 'topic', { durable: true });
-  await channel.assertQueue(QUEUE_NAME, { durable: true });
+  await channel.assertQueue(QUEUE_NAME, {
+    durable: true,
+    arguments: {
+      'x-queue-type': 'classic',
+      'x-dead-letter-exchange': 'kitchenledger.dlx',
+      'x-dead-letter-routing-key': `${QUEUE_NAME}.dead`,
+    },
+  });
 
   for (const routingKey of BINDINGS) {
     await channel.bindQueue(QUEUE_NAME, EXCHANGE, routingKey);
@@ -95,8 +105,10 @@ export async function startEventConsumer(): Promise<void> {
     console.error('RabbitMQ connection error:', err);
   });
   connection.on('close', () => {
-    console.warn('RabbitMQ connection closed — reconnecting in 5s');
-    setTimeout(startEventConsumer, 5_000);
+    const nextAttempt = attempt + 1;
+    const delay = computeBackoffMs(nextAttempt);
+    console.warn(`RabbitMQ connection closed — reconnecting in ${delay}ms (attempt ${nextAttempt})`);
+    setTimeout(() => { void startEventConsumer(nextAttempt); }, delay);
   });
 }
 
