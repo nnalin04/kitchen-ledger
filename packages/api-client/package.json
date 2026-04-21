@@ -10,7 +10,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@kitchenledger/types": "*"
+    "@kitchenledger/types": "*",
+    "axios": "^1.7.0"
   },
   "devDependencies": {
     "typescript": "^5.5.0"
