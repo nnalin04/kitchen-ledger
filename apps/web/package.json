@@ -19,7 +19,17 @@
     "@kitchenledger/api-client": "*",
     "swr": "^2.2.5",
     "zod": "^3.23.8",
-    "clsx": "^2.1.1"
+    "clsx": "^2.1.1",
+    "class-variance-authority": "^0.7.0",
+    "tailwind-merge": "^2.4.0",
+    "@radix-ui/react-dialog": "^1.1.1",
+    "@radix-ui/react-select": "^2.1.1",
+    "@radix-ui/react-tabs": "^1.1.0",
+    "@radix-ui/react-separator": "^1.1.0",
+    "zustand": "^4.5.4",
+    "axios": "^1.7.2",
+    "react-hook-form": "^7.52.1",
+    "@hookform/resolvers": "^3.9.0"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
