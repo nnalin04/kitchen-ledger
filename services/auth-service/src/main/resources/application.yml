@@ -43,6 +43,9 @@ internal:
   service:
     secret: ${INTERNAL_SERVICE_SECRET:}
 
+app:
+  web-url: ${APP_WEB_URL:http://localhost:3000}
+
 resend:
   api-key: ${RESEND_API_KEY:}
 

@@ -191,10 +191,16 @@ public class StockReceiptService {
             String name = (String) item.get("name");
             if (name == null || name.isBlank()) continue;
 
+            // Fetch up to 2 to detect ambiguity — single match auto-fills, multiple require user confirmation
             Page<InventoryItem> matches = itemRepository.findWithFilters(
-                    tenantId, name, null, false, PageRequest.of(0, 1));
+                    tenantId, name, null, false, PageRequest.of(0, 2));
             if (matches.isEmpty()) {
-                log.debug("prefillFromOcr: no inventory item matched OCR name '{}'", name);
+                log.debug("prefillFromOcr: no inventory item matched OCR name '{}' on receipt {}", name, receiptId);
+                continue;
+            }
+            if (matches.getTotalElements() > 1) {
+                log.warn("prefillFromOcr: ambiguous OCR name '{}' matched {} items on receipt {} — skipping auto-fill, user confirmation required",
+                        name, matches.getTotalElements(), receiptId);
                 continue;
             }
 

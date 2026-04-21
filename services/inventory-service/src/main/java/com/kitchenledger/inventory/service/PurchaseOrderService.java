@@ -187,7 +187,7 @@ public class PurchaseOrderService {
         }
         if (po.getStatus() == PurchaseOrderStatus.partial) {
             throw new ValidationException(
-                    "PO is only partially received. Use force-close override to close with outstanding items.");
+                    "PO is only partially received. Receive all outstanding items before closing.");
         }
         PurchaseOrderStatus previous = po.getStatus();
         po.setStatus(PurchaseOrderStatus.closed);
@@ -207,9 +207,14 @@ public class PurchaseOrderService {
     }
 
     private String generatePoNumber(UUID tenantId) {
-        // Format: PO-YYYYMMDD-XXXX (sequential within the day, collision-safe via UUID suffix)
         String date = java.time.LocalDate.now().toString().replace("-", "");
-        String suffix = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
-        return "PO-" + date + "-" + suffix;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+            String candidate = "PO-" + date + "-" + suffix;
+            if (!poRepository.existsByTenantIdAndPoNumber(tenantId, candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("Could not generate a unique PO number after 5 attempts");
     }
 }

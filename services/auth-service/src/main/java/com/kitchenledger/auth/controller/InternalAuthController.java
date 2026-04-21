@@ -1,8 +1,12 @@
 package com.kitchenledger.auth.controller;
 
+import com.kitchenledger.auth.dto.response.TenantResponse;
 import com.kitchenledger.auth.dto.response.UserResponse;
 import com.kitchenledger.auth.exception.AccessDeniedException;
+import com.kitchenledger.auth.model.enums.TokenType;
+import com.kitchenledger.auth.repository.AuthTokenRepository;
 import com.kitchenledger.auth.security.JwtService;
+import com.kitchenledger.auth.service.TenantService;
 import com.kitchenledger.auth.service.UserService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -12,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -28,9 +33,14 @@ public class InternalAuthController {
 
     private final JwtService jwtService;
     private final UserService userService;
+    private final TenantService tenantService;
+    private final AuthTokenRepository authTokenRepository;
 
     @Value("${internal.service.secret:}")
     private String internalServiceSecret;
+
+    @Value("${app.web-url:http://localhost:3000}")
+    private String webUrl;
 
     /**
      * Used by Gateway to verify a JWT token and extract its claims.
@@ -88,6 +98,44 @@ public class InternalAuthController {
         checkInternalSecret(request);
         var users = userService.listByTenantAndRoles(tenantId, roles);
         return ResponseEntity.ok(Map.of("success", true, "data", users));
+    }
+
+    /**
+     * Used by other services to resolve tenant config (timezone, currency) without
+     * going through the public API Gateway.
+     */
+    @GetMapping("/tenants/{tenantId}")
+    public ResponseEntity<Map<String, Object>> getTenant(
+            @PathVariable UUID tenantId,
+            HttpServletRequest request) {
+        checkInternalSecret(request);
+        TenantResponse tenant = tenantService.getById(tenantId);
+        return ResponseEntity.ok(Map.of("success", true, "data", tenant));
+    }
+
+    /**
+     * Called by notification-service at email-send time to get a signed invite URL.
+     * Returns the accept-invite URL constructed from the raw token stored in the
+     * AuthToken metadata — without ever exposing the raw token over RabbitMQ or outbox.
+     */
+    @GetMapping("/invites/{userId}/link")
+    public ResponseEntity<Map<String, String>> getInviteLink(
+            @PathVariable UUID userId,
+            HttpServletRequest request) {
+        checkInternalSecret(request);
+
+        return authTokenRepository
+                .findFirstByUserIdAndTokenTypeAndUsedAtIsNullAndExpiresAtAfterOrderByCreatedAtDesc(
+                        userId, TokenType.invite, Instant.now())
+                .map(token -> {
+                    String rawToken = (String) token.getMetadata().get("raw_token");
+                    if (rawToken == null || rawToken.isBlank()) {
+                        return ResponseEntity.<Map<String, String>>notFound().build();
+                    }
+                    String inviteUrl = webUrl + "/invite/accept?token=" + rawToken;
+                    return ResponseEntity.ok(Map.of("invite_url", inviteUrl));
+                })
+                .orElse(ResponseEntity.notFound().build());
     }
 
     private void checkInternalSecret(HttpServletRequest request) {

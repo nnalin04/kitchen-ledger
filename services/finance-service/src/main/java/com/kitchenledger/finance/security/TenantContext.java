@@ -13,8 +13,9 @@ package com.kitchenledger.finance.security;
  */
 public final class TenantContext {
 
-    private static final ThreadLocal<String> CURRENT_TENANT = new ThreadLocal<>();
-    private static final ThreadLocal<String> CURRENT_USER   = new ThreadLocal<>();
+    private static final ThreadLocal<String> CURRENT_TENANT   = new ThreadLocal<>();
+    private static final ThreadLocal<String> CURRENT_USER     = new ThreadLocal<>();
+    private static final ThreadLocal<String> CURRENT_CURRENCY = new ThreadLocal<>();
 
     private TenantContext() {}
 
@@ -34,8 +35,23 @@ public final class TenantContext {
         return CURRENT_USER.get();
     }
 
+    public static void setCurrency(String currency) {
+        CURRENT_CURRENCY.set(currency);
+    }
+
+    /**
+     * Returns the tenant's configured currency for the current request thread.
+     * Falls back to {@code "INR"} when the header was not forwarded by the Gateway
+     * (e.g. internal health-check calls).
+     */
+    public static String getCurrency() {
+        String c = CURRENT_CURRENCY.get();
+        return (c != null && !c.isBlank()) ? c : "INR";
+    }
+
     public static void clear() {
         CURRENT_TENANT.remove();
         CURRENT_USER.remove();
+        CURRENT_CURRENCY.remove();
     }
 }

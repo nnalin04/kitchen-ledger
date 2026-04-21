@@ -146,6 +146,8 @@ export async function dispatchWelcomeEmail(payload: {
 
 /**
  * Dispatches the invitation email for an invited user.
+ * Accepts a fully-formed inviteUrl (fetched from auth-service at send time)
+ * rather than a raw token, so the token is never stored in RabbitMQ or outbox.
  */
 export async function dispatchInvitationEmail(payload: {
   userId: string;
@@ -153,15 +155,14 @@ export async function dispatchInvitationEmail(payload: {
   email: string;
   fullName: string;
   role: string;
-  inviteToken: string;
+  inviteUrl: string;
   tenantName: string;
 }): Promise<void> {
   const tmpl = invitationEmail({
     fullName: payload.fullName,
     restaurantName: payload.tenantName,
-    inviteToken: payload.inviteToken,
+    inviteUrl: payload.inviteUrl,
     role: payload.role,
-    appUrl: config.APP_URL,
   });
 
   await sendEmail({ ...tmpl, to: payload.email });

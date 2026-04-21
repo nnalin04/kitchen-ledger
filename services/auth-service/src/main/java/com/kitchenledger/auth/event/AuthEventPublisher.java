@@ -92,17 +92,18 @@ public class AuthEventPublisher {
         maxAttempts = 3,
         backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
     )
-    public void publishUserInvited(User invitedUser, String inviteToken) {
+    public void publishUserInvited(User invitedUser, String tenantName) {
         EventEnvelope envelope = EventEnvelope.builder()
                 .eventType("auth.user.invited")
                 .tenantId(invitedUser.getTenantId())
                 .producedBy("auth-service")
                 .correlationId(MDC.get("correlationId"))
                 .payload(Map.of(
-                        "user_id", invitedUser.getId().toString(),
-                        "email", invitedUser.getEmail(),
-                        "role", invitedUser.getRole().name(),
-                        "invite_token", inviteToken
+                        "user_id",     invitedUser.getId().toString(),
+                        "email",       invitedUser.getEmail(),
+                        "full_name",   invitedUser.getFullName(),
+                        "role",        invitedUser.getRole().name(),
+                        "tenant_name", tenantName
                 ))
                 .build();
 
@@ -111,13 +112,14 @@ public class AuthEventPublisher {
     }
 
     @Recover
-    public void recoverPublishUserInvited(AmqpException ex, User invitedUser, String inviteToken) {
+    public void recoverPublishUserInvited(AmqpException ex, User invitedUser, String tenantName) {
         log.error("CRITICAL: Event publish failed after 3 retries for key auth.user.invited. Saving to outbox.", ex);
         saveToOutbox(invitedUser.getTenantId(), "auth.user.invited", Map.of(
-                "user_id", invitedUser.getId().toString(),
-                "email", invitedUser.getEmail(),
-                "role", invitedUser.getRole().name(),
-                "invite_token", inviteToken
+                "user_id",     invitedUser.getId().toString(),
+                "email",       invitedUser.getEmail(),
+                "full_name",   invitedUser.getFullName(),
+                "role",        invitedUser.getRole().name(),
+                "tenant_name", tenantName
         ));
     }
 

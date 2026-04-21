@@ -41,8 +41,15 @@ public class FinanceEventListener {
             log.debug("FinanceEventListener: OCR doc type '{}' not handled by finance, skipping", docType);
             return;
         }
+
+        UUID initiatedBy = null;
+        String initiatedByStr = (String) payload.get("initiated_by_user_id");
+        if (initiatedByStr != null && !initiatedByStr.isBlank()) {
+            try { initiatedBy = UUID.fromString(initiatedByStr); } catch (IllegalArgumentException ignored) {}
+        }
+
         log.info("FinanceEventListener: creating expense from OCR result for tenant {} (doc_type={})",
                 tenantId, docType);
-        expenseService.createFromOcr(tenantId, payload);
+        expenseService.createFromOcr(tenantId, initiatedBy, payload);
     }
 }

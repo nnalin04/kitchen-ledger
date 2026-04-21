@@ -82,11 +82,11 @@ export function passwordResetEmail(params: {
 export function invitationEmail(params: {
   fullName: string;
   restaurantName: string;
-  inviteToken: string;
+  /** Fully-formed accept URL — token embedded by auth-service, never passed through MQ */
+  inviteUrl: string;
   role: string;
-  appUrl: string;
 }): EmailPayload {
-  const acceptUrl = `${params.appUrl}/accept-invite?token=${params.inviteToken}`;
+  const acceptUrl = params.inviteUrl;
   return {
     to: '', // set by caller
     subject: `You've been invited to join ${params.restaurantName} on KitchenLedger`,

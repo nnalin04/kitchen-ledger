@@ -50,3 +50,24 @@ export async function getUserById(
     return null;
   }
 }
+
+/**
+ * Fetches the invite URL for a user from auth-service at email-send time.
+ * The raw token is never transmitted over RabbitMQ — it lives only in the
+ * auth-service DB and is returned here via a secured internal call.
+ * Returns null if no valid (unused, non-expired) invite token exists.
+ */
+export async function getInviteLink(userId: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${config.AUTH_SERVICE_URL}/internal/auth/invites/${userId}/link`,
+      { headers: INTERNAL_HEADERS }
+    );
+    if (!res.ok) return null;
+    const body = await res.json() as { invite_url: string };
+    return body.invite_url ?? null;
+  } catch (err) {
+    console.error('getInviteLink error', { userId, err });
+    return null;
+  }
+}

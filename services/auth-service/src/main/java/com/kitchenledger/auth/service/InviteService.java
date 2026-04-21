@@ -7,9 +7,11 @@ import com.kitchenledger.auth.exception.ConflictException;
 import com.kitchenledger.auth.exception.ResourceNotFoundException;
 import com.kitchenledger.auth.exception.ValidationException;
 import com.kitchenledger.auth.model.AuthToken;
+import com.kitchenledger.auth.model.Tenant;
 import com.kitchenledger.auth.model.User;
 import com.kitchenledger.auth.model.enums.TokenType;
 import com.kitchenledger.auth.repository.AuthTokenRepository;
+import com.kitchenledger.auth.repository.TenantRepository;
 import com.kitchenledger.auth.repository.UserRepository;
 import com.kitchenledger.auth.security.PasswordService;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +30,7 @@ import java.util.UUID;
 public class InviteService {
 
     private final UserRepository userRepository;
+    private final TenantRepository tenantRepository;
     private final AuthTokenRepository authTokenRepository;
     private final AuthEventPublisher eventPublisher;
     private final PasswordService passwordService;
@@ -67,13 +70,21 @@ public class InviteService {
                 .expiresAt(Instant.now().plus(72, ChronoUnit.HOURS))
                 .metadata(Map.of(
                         "role", req.getRole().name(),
-                        "inviter_tenant_id", tenantId.toString()
+                        "inviter_tenant_id", tenantId.toString(),
+                        // raw_token stored only in auth-service DB (not broadcast via RabbitMQ/outbox)
+                        // so notification-service can fetch the invite URL via internal API at send time
+                        "raw_token", rawToken
                 ))
                 .build();
         authTokenRepository.save(authToken);
 
-        // Publish event → notification-service sends the invite email
-        eventPublisher.publishUserInvited(user, rawToken);
+        String tenantName = tenantRepository.findById(tenantId)
+                .map(Tenant::getRestaurantName)
+                .orElse("your restaurant");
+
+        // Publish event → notification-service calls back /internal/auth/invites/{userId}/link
+        // to get the invite URL at send time — raw token is never included in the event payload
+        eventPublisher.publishUserInvited(user, tenantName);
 
         log.info("Invited user {} to tenant {}", req.getEmail(), tenantId);
         return UserResponse.from(user);

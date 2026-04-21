@@ -8,6 +8,7 @@ import {
   dispatch,
   dispatchToTenantRecipients,
 } from '../providers/dispatcher';
+import { getInviteLink } from '../clients/auth.client';
 import { computeBackoffMs } from '../utils/backoff';
 
 const EXCHANGE   = 'kitchenledger.events';
@@ -129,17 +130,27 @@ async function handleEvent(
       });
       break;
 
-    case 'auth.user.invited':
+    case 'auth.user.invited': {
+      // Fetch the invite URL from auth-service at send time — raw token is never in the event
+      const inviteUrl = await getInviteLink(payload.user_id as string);
+      if (!inviteUrl) {
+        console.warn('auth.user.invited: no valid invite token found for user, skipping email', {
+          userId: payload.user_id,
+          tenantId,
+        });
+        break;
+      }
       await dispatchInvitationEmail({
-        userId:      payload.user_id,
+        userId:     payload.user_id as string,
         tenantId,
-        email:       payload.email,
-        fullName:    payload.full_name ?? payload.email,
-        role:        payload.role,
-        inviteToken: payload.invite_token,
-        tenantName:  payload.tenant_name ?? 'your restaurant',
+        email:      payload.email as string,
+        fullName:   (payload.full_name ?? payload.email) as string,
+        role:       payload.role as string,
+        inviteUrl,
+        tenantName: (payload.tenant_name ?? 'your restaurant') as string,
       });
       break;
+    }
 
     case 'auth.password.reset.requested':
       await dispatchPasswordResetEmail({

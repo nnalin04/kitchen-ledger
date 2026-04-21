@@ -62,20 +62,20 @@ public class FinanceEventPublisher {
         maxAttempts = 3,
         backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
     )
-    public void publishDsrReconciled(UUID tenantId, DailySalesReport dsr) {
+    public void publishDsrReconciled(UUID tenantId, DailySalesReport dsr, String currency) {
         Map<String, Object> payload = Map.of(
                 "dsr_id",        dsr.getId().toString(),
                 "report_date",   dsr.getReportDate().toString(),
                 "gross_sales",   dsr.getGrossSales().toPlainString(),
                 "net_sales",     dsr.getNetSales() != null ? dsr.getNetSales().toPlainString() : "0",
                 "covers_count",  String.valueOf(dsr.getCoversCount()),
-                "currency",      "INR"
+                "currency",      currency
         );
         publishEnvelope(tenantId, "finance.dsr.reconciled", payload);
     }
 
     @Recover
-    public void recoverPublishDsrReconciled(AmqpException ex, UUID tenantId, DailySalesReport dsr) {
+    public void recoverPublishDsrReconciled(AmqpException ex, UUID tenantId, DailySalesReport dsr, String currency) {
         log.error("CRITICAL: Event publish failed after 3 retries for key finance.dsr.reconciled. Saving to outbox.", ex);
         saveToOutbox(tenantId, "finance.dsr.reconciled", Map.of(
                 "dsr_id",        dsr.getId().toString(),
@@ -83,7 +83,7 @@ public class FinanceEventPublisher {
                 "gross_sales",   dsr.getGrossSales().toPlainString(),
                 "net_sales",     dsr.getNetSales() != null ? dsr.getNetSales().toPlainString() : "0",
                 "covers_count",  String.valueOf(dsr.getCoversCount()),
-                "currency",      "INR"
+                "currency",      currency
         ));
     }
 
@@ -93,7 +93,7 @@ public class FinanceEventPublisher {
         backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
     )
     public void publishCashDiscrepancy(DailySalesReport dsr, BigDecimal expectedCash,
-                                       BigDecimal actualCash, BigDecimal variance) {
+                                       BigDecimal actualCash, BigDecimal variance, String currency) {
         String direction = variance.compareTo(BigDecimal.ZERO) > 0 ? "OVER" : "SHORT";
         Map<String, Object> payload = Map.of(
                 "dsr_id",             dsr.getId().toString(),
@@ -102,7 +102,7 @@ public class FinanceEventPublisher {
                 "actual_cash",        actualCash.toPlainString(),
                 "variance",           variance.toPlainString(),
                 "variance_direction", direction,
-                "currency",           "INR"
+                "currency",           currency
         );
         publishEnvelope(dsr.getTenantId(), "finance.cash.discrepancy", payload);
     }
@@ -110,7 +110,7 @@ public class FinanceEventPublisher {
     @Recover
     public void recoverPublishCashDiscrepancy(AmqpException ex, DailySalesReport dsr,
                                               BigDecimal expectedCash, BigDecimal actualCash,
-                                              BigDecimal variance) {
+                                              BigDecimal variance, String currency) {
         log.error("CRITICAL: Event publish failed after 3 retries for key finance.cash.discrepancy. Saving to outbox.", ex);
         String direction = variance.compareTo(BigDecimal.ZERO) > 0 ? "OVER" : "SHORT";
         saveToOutbox(dsr.getTenantId(), "finance.cash.discrepancy", Map.of(
@@ -120,7 +120,7 @@ public class FinanceEventPublisher {
                 "actual_cash",        actualCash.toPlainString(),
                 "variance",           variance.toPlainString(),
                 "variance_direction", direction,
-                "currency",           "INR"
+                "currency",           currency
         ));
     }
 
@@ -129,26 +129,26 @@ public class FinanceEventPublisher {
         maxAttempts = 3,
         backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
     )
-    public void publishPaymentOverdue(VendorPayment vp) {
+    public void publishPaymentOverdue(VendorPayment vp, String currency) {
         Map<String, Object> payload = Map.of(
                 "payment_id", vp.getId().toString(),
                 "vendor_id",  vp.getVendorId().toString(),
                 "amount",     vp.getAmount().toPlainString(),
                 "due_date",   vp.getDueDate().toString(),
-                "currency",   "INR"
+                "currency",   currency
         );
         publishEnvelope(vp.getTenantId(), "finance.payment.overdue", payload);
     }
 
     @Recover
-    public void recoverPublishPaymentOverdue(AmqpException ex, VendorPayment vp) {
+    public void recoverPublishPaymentOverdue(AmqpException ex, VendorPayment vp, String currency) {
         log.error("CRITICAL: Event publish failed after 3 retries for key finance.payment.overdue. Saving to outbox.", ex);
         saveToOutbox(vp.getTenantId(), "finance.payment.overdue", Map.of(
                 "payment_id", vp.getId().toString(),
                 "vendor_id",  vp.getVendorId().toString(),
                 "amount",     vp.getAmount().toPlainString(),
                 "due_date",   vp.getDueDate().toString(),
-                "currency",   "INR"
+                "currency",   currency
         ));
     }
 
