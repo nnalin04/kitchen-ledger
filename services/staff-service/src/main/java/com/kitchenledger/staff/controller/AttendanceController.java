@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -39,11 +38,19 @@ public class AttendanceController {
     }
 
     @GetMapping("/employee/{employeeId}")
-    public ResponseEntity<List<AttendanceResponse>> listByEmployee(
-            HttpServletRequest req, @PathVariable UUID employeeId) {
+    public ResponseEntity<?> listByEmployee(
+            HttpServletRequest req,
+            @PathVariable UUID employeeId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @PageableDefault(size = 30) Pageable pageable) {
+        if (pageable.getPageSize() > 100) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Page size must not exceed 100"));
+        }
         return ResponseEntity.ok(
-                attendanceService.listByEmployee(tenantId(req), employeeId)
-                        .stream().map(AttendanceResponse::from).toList());
+                attendanceService.listByEmployee(tenantId(req), employeeId, from, to, pageable)
+                        .map(AttendanceResponse::from));
     }
 
     @GetMapping("/employee/{employeeId}/hours")

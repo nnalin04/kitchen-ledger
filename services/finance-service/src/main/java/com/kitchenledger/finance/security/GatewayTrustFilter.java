@@ -15,9 +15,10 @@ import org.slf4j.MDC;
 @Component
 public class GatewayTrustFilter extends OncePerRequestFilter {
 
-    public static final String ATTR_USER_ID   = "userId";
-    public static final String ATTR_TENANT_ID = "tenantId";
-    public static final String ATTR_USER_ROLE = "userRole";
+    public static final String ATTR_USER_ID        = "userId";
+    public static final String ATTR_TENANT_ID      = "tenantId";
+    public static final String ATTR_USER_ROLE      = "userRole";
+    public static final String ATTR_TENANT_CURRENCY = "tenantCurrency";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -76,10 +77,16 @@ public class GatewayTrustFilter extends OncePerRequestFilter {
             request.setAttribute(ATTR_USER_ROLE, rawRole);
         }
 
+        String rawCurrency = request.getHeader("x-tenant-currency");
+        if (rawCurrency != null && !rawCurrency.isBlank()) {
+            request.setAttribute(ATTR_TENANT_CURRENCY, rawCurrency);
+        }
+
         // Populate thread-locals so TenantRlsAspect can set the PostgreSQL session variables
         // that activate RLS policies and supply the current user to the audit trigger.
         TenantContext.set(rawTenantId);
         TenantContext.setUserId(rawUserId);
+        TenantContext.setCurrency(rawCurrency);
         
         try {
             filterChain.doFilter(request, response);

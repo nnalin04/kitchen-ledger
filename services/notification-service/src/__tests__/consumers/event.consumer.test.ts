@@ -43,6 +43,14 @@ vi.mock('../../providers/dispatcher', () => ({
   dispatchToTenantRecipients:  vi.fn().mockResolvedValue({ attempted: 0, sent: 0, skipped: 0 }),
 }));
 
+// ── Mock auth client ──────────────────────────────────────────────────────────
+
+vi.mock('../../clients/auth.client', () => ({
+  getUsersByRole: vi.fn().mockResolvedValue([]),
+  getUserById:    vi.fn().mockResolvedValue(null),
+  getInviteLink:  vi.fn().mockResolvedValue('http://localhost:3000/invite/accept?token=test-token'),
+}));
+
 // ── Imports ───────────────────────────────────────────────────────────────────
 
 import amqplib                  from 'amqplib';
@@ -53,6 +61,7 @@ import {
   dispatch,
   dispatchToTenantRecipients,
 } from '../../providers/dispatcher';
+import { getInviteLink } from '../../clients/auth.client';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -154,22 +163,39 @@ describe('event routing', () => {
     expect(mockAck).toHaveBeenCalledOnce();
   });
 
-  it('routes auth.user.invited → dispatchInvitationEmail', async () => {
+  it('routes auth.user.invited → fetches invite URL from auth-service and calls dispatchInvitationEmail', async () => {
     await simulateMessage('auth.user.invited', {
-      user_id:      'user-456',
-      email:        'staff@spicegarden.com',
-      full_name:    'Priya Singh',
-      role:         'kitchen_staff',
-      invite_token: 'raw-token-xyz',
-      tenant_name:  'Spice Garden',
+      user_id:     'user-456',
+      email:       'staff@spicegarden.com',
+      full_name:   'Priya Singh',
+      role:        'kitchen_staff',
+      tenant_name: 'Spice Garden',
+      // invite_token is intentionally absent — it must never be in the event payload
     });
 
+    expect(getInviteLink).toHaveBeenCalledWith('user-456');
     expect(dispatchInvitationEmail).toHaveBeenCalledWith(expect.objectContaining({
-      userId:      'user-456',
-      email:       'staff@spicegarden.com',
-      role:        'kitchen_staff',
-      inviteToken: 'raw-token-xyz',
+      userId:    'user-456',
+      email:     'staff@spicegarden.com',
+      role:      'kitchen_staff',
+      inviteUrl: 'http://localhost:3000/invite/accept?token=test-token',
     }));
+    expect(mockAck).toHaveBeenCalledOnce();
+  });
+
+  it('auth.user.invited: skips email and acks when auth-service returns no invite link', async () => {
+    vi.mocked(getInviteLink).mockResolvedValueOnce(null);
+
+    await simulateMessage('auth.user.invited', {
+      user_id:     'user-789',
+      email:       'ghost@spicegarden.com',
+      role:        'server',
+      tenant_name: 'Spice Garden',
+    });
+
+    expect(getInviteLink).toHaveBeenCalledWith('user-789');
+    expect(dispatchInvitationEmail).not.toHaveBeenCalled();
+    // consumer should still ack — skipping is not an error
     expect(mockAck).toHaveBeenCalledOnce();
   });
 

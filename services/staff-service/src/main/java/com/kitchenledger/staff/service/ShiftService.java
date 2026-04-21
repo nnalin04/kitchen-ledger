@@ -109,7 +109,7 @@ public class ShiftService {
             throw new ValidationException(
                     "Cannot publish schedules starting before " + minAllowedStart
                     + ". Schedules must be published at least " + MIN_PUBLISH_ADVANCE_DAYS
-                    + " days in advance. Use force-publish override for urgent changes.");
+                    + " days in advance.");
         }
 
         List<Shift> shifts = shiftRepository

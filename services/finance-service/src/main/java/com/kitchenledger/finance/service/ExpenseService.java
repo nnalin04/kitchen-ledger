@@ -95,7 +95,7 @@ public class ExpenseService {
      * The [OCR] prefix in description lets staff identify and review auto-created entries.
      */
     @Transactional
-    public void createFromOcr(UUID tenantId, Map<String, Object> ocrPayload) {
+    public void createFromOcr(UUID tenantId, UUID initiatedBy, Map<String, Object> ocrPayload) {
         @SuppressWarnings("unchecked")
         Map<String, Object> result = (Map<String, Object>) ocrPayload.get("result");
         if (result == null) {
@@ -128,9 +128,8 @@ public class ExpenseService {
         req.setReceiptUrl((String) result.get("file_url"));
         req.setPaymentMethod(PaymentMethod.cash);
 
-        // Nil UUID marks system-initiated records; no real user triggered this
-        UUID systemUser = new UUID(0L, 0L);
-        create(tenantId, systemUser, req);
+        // initiatedBy is null when ai-service doesn't supply a user context — allowed by DB
+        create(tenantId, initiatedBy, req);
         log.info("ExpenseService.createFromOcr: created expense for tenant {} from OCR (vendor: {})", tenantId, vendorName);
     }
 

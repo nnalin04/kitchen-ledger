@@ -1,5 +1,6 @@
 package com.kitchenledger.finance.job;
 
+import com.kitchenledger.finance.client.TenantCurrencyResolver;
 import com.kitchenledger.finance.event.FinanceEventPublisher;
 import com.kitchenledger.finance.model.VendorPayment;
 import com.kitchenledger.finance.repository.VendorPaymentRepository;
@@ -24,6 +25,7 @@ class OverduePaymentJobTest {
 
     @Mock private VendorPaymentRepository vendorPaymentRepository;
     @Mock private FinanceEventPublisher    eventPublisher;
+    @Mock private TenantCurrencyResolver   tenantCurrencyResolver;
 
     @InjectMocks
     private OverduePaymentJob overduePaymentJob;
@@ -52,6 +54,7 @@ class OverduePaymentJobTest {
         when(vendorPaymentRepository.findOverdue(any(UUID.class), any(LocalDate.class)))
                 .thenReturn(List.of(vp));
         when(vendorPaymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantCurrencyResolver.resolve(tenantId)).thenReturn("INR");
 
         overduePaymentJob.runCheck();
 
@@ -59,7 +62,7 @@ class OverduePaymentJobTest {
         verify(vendorPaymentRepository).save(captor.capture());
         assertThat(captor.getValue().getPaymentStatus()).isEqualTo("overdue");
 
-        verify(eventPublisher).publishPaymentOverdue(vp);
+        verify(eventPublisher).publishPaymentOverdue(vp, "INR");
     }
 
     @Test
@@ -70,7 +73,7 @@ class OverduePaymentJobTest {
         overduePaymentJob.runCheck();
 
         verify(vendorPaymentRepository, never()).save(any());
-        verify(eventPublisher, never()).publishPaymentOverdue(any());
+        verify(eventPublisher, never()).publishPaymentOverdue(any(), any());
     }
 
     @Test
@@ -83,11 +86,12 @@ class OverduePaymentJobTest {
         when(vendorPaymentRepository.findOverdue(any(UUID.class), any(LocalDate.class)))
                 .thenReturn(List.of(vp1, vp2));
         when(vendorPaymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantCurrencyResolver.resolve(tenantId)).thenReturn("INR");
 
         overduePaymentJob.runCheck();
 
         verify(vendorPaymentRepository, times(2)).save(any());
-        verify(eventPublisher, times(2)).publishPaymentOverdue(any());
+        verify(eventPublisher, times(2)).publishPaymentOverdue(any(), any());
     }
 
     @Test
@@ -120,6 +124,8 @@ class OverduePaymentJobTest {
         when(vendorPaymentRepository.findOverdue(eq(tenant3), any(LocalDate.class)))
                 .thenReturn(List.of(vp3));
         when(vendorPaymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantCurrencyResolver.resolve(tenant1)).thenReturn("INR");
+        when(tenantCurrencyResolver.resolve(tenant3)).thenReturn("INR");
 
         // Must not throw — job isolates per-tenant failures
         overduePaymentJob.runCheck();
@@ -128,8 +134,8 @@ class OverduePaymentJobTest {
         verify(vendorPaymentRepository).findOverdue(eq(tenant1), any(LocalDate.class));
         verify(vendorPaymentRepository).findOverdue(eq(tenant2), any(LocalDate.class));
         verify(vendorPaymentRepository).findOverdue(eq(tenant3), any(LocalDate.class));
-        verify(eventPublisher).publishPaymentOverdue(vp1);
-        verify(eventPublisher).publishPaymentOverdue(vp3);
-        verify(eventPublisher, never()).publishPaymentOverdue(argThat(p -> p.getTenantId().equals(tenant2)));
+        verify(eventPublisher).publishPaymentOverdue(vp1, "INR");
+        verify(eventPublisher).publishPaymentOverdue(vp3, "INR");
+        verify(eventPublisher, never()).publishPaymentOverdue(argThat(p -> p.getTenantId().equals(tenant2)), any());
     }
 }

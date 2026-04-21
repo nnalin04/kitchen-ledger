@@ -1,10 +1,10 @@
 package com.kitchenledger.staff.service;
 
+import com.kitchenledger.staff.client.TenantTimezoneCache;
 import com.kitchenledger.staff.dto.request.ClockInRequest;
 import com.kitchenledger.staff.event.StaffEventPublisher;
 import com.kitchenledger.staff.exception.ConflictException;
 import com.kitchenledger.staff.exception.ResourceNotFoundException;
-import com.kitchenledger.staff.exception.ValidationException;
 import com.kitchenledger.staff.model.Attendance;
 import com.kitchenledger.staff.model.Employee;
 import com.kitchenledger.staff.repository.AttendanceRepository;
@@ -35,9 +35,10 @@ public class AttendanceService {
     private static final BigDecimal OVERTIME_WARNING_HOURS = new BigDecimal("36.0");
     private static final BigDecimal OVERTIME_THRESHOLD      = new BigDecimal("40.0");
 
-    private final AttendanceRepository attendanceRepository;
-    private final EmployeeRepository   employeeRepository;
-    private final StaffEventPublisher  eventPublisher;
+    private final AttendanceRepository  attendanceRepository;
+    private final EmployeeRepository    employeeRepository;
+    private final StaffEventPublisher   eventPublisher;
+    private final TenantTimezoneCache   timezoneCache;
 
     @Transactional(readOnly = true)
     public Page<Attendance> list(UUID tenantId, Pageable pageable) {
@@ -45,8 +46,15 @@ public class AttendanceService {
     }
 
     @Transactional(readOnly = true)
-    public List<Attendance> listByEmployee(UUID tenantId, UUID employeeId) {
-        return attendanceRepository.findByTenantIdAndEmployeeIdOrderByClockInAtDesc(tenantId, employeeId);
+    public Page<Attendance> listByEmployee(UUID tenantId, UUID employeeId,
+                                           Instant from, Instant to, Pageable pageable) {
+        if (from != null && to != null) {
+            return attendanceRepository
+                    .findByTenantIdAndEmployeeIdAndClockInAtBetweenOrderByClockInAtDesc(
+                            tenantId, employeeId, from, to, pageable);
+        }
+        return attendanceRepository.findByTenantIdAndEmployeeIdOrderByClockInAtDesc(
+                tenantId, employeeId, pageable);
     }
 
     @Transactional(readOnly = true)
@@ -97,11 +105,12 @@ public class AttendanceService {
 
     private void checkOvertimeApproaching(UUID tenantId, UUID employeeId, Instant clockOut) {
         try {
-            ZonedDateTime zdt       = clockOut.atZone(ZoneId.of("Asia/Kolkata"));
+            ZoneId zone             = ZoneId.of(timezoneCache.get(tenantId));
+            ZonedDateTime zdt       = clockOut.atZone(zone);
             Instant weekStart       = zdt.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                                        .toLocalDate().atStartOfDay(ZoneId.of("Asia/Kolkata")).toInstant();
+                                        .toLocalDate().atStartOfDay(zone).toInstant();
             Instant weekEnd         = zdt.toLocalDate().plusDays(1)
-                                        .atStartOfDay(ZoneId.of("Asia/Kolkata")).toInstant();
+                                        .atStartOfDay(zone).toInstant();
 
             BigDecimal weeklyHours  = attendanceRepository.sumHoursWorked(tenantId, employeeId, weekStart, weekEnd);
             if (weeklyHours == null) return;

@@ -32,7 +32,7 @@ public class OutboxReplayJob {
     @Scheduled(fixedDelay = 300_000) // every 5 minutes
     public void replayPendingEvents() {
         List<OutboxEvent> pending = outboxEventRepository
-            .findByReplayedAtIsNullAndRetryCountLessThan(MAX_RETRY_COUNT);
+            .findPendingForUpdate(MAX_RETRY_COUNT);
 
         if (pending.isEmpty()) return;
 

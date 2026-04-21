@@ -1,5 +1,6 @@
 package com.kitchenledger.finance.job;
 
+import com.kitchenledger.finance.client.TenantCurrencyResolver;
 import com.kitchenledger.finance.event.FinanceEventPublisher;
 import com.kitchenledger.finance.model.VendorPayment;
 import com.kitchenledger.finance.repository.VendorPaymentRepository;
@@ -20,6 +21,7 @@ public class OverduePaymentJob {
 
     private final VendorPaymentRepository vendorPaymentRepository;
     private final FinanceEventPublisher   eventPublisher;
+    private final TenantCurrencyResolver  tenantCurrencyResolver;
 
     @Scheduled(cron = "0 0 8 * * *")
     public void runCheck() {
@@ -43,13 +45,14 @@ public class OverduePaymentJob {
 
     @Transactional
     public void processForTenant(UUID tenantId, LocalDate today) {
+        String currency = tenantCurrencyResolver.resolve(tenantId);
         List<VendorPayment> overdue = vendorPaymentRepository.findOverdue(tenantId, today);
         for (VendorPayment vp : overdue) {
             vp.setPaymentStatus("overdue");
             vendorPaymentRepository.save(vp);
-            eventPublisher.publishPaymentOverdue(vp);
-            log.info("OverduePaymentJob: marked payment {} overdue (tenant={}, vendor={}, amount={})",
-                    vp.getId(), tenantId, vp.getVendorId(), vp.getAmount());
+            eventPublisher.publishPaymentOverdue(vp, currency);
+            log.info("OverduePaymentJob: marked payment {} overdue (tenant={}, vendor={}, amount={}, currency={})",
+                    vp.getId(), tenantId, vp.getVendorId(), vp.getAmount(), currency);
         }
     }
 }

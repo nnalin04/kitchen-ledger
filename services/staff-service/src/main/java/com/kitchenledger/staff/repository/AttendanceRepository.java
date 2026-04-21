@@ -17,7 +17,10 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
 
     Page<Attendance> findByTenantIdOrderByClockInAtDesc(UUID tenantId, Pageable pageable);
 
-    List<Attendance> findByTenantIdAndEmployeeIdOrderByClockInAtDesc(UUID tenantId, UUID employeeId);
+    Page<Attendance> findByTenantIdAndEmployeeIdOrderByClockInAtDesc(UUID tenantId, UUID employeeId, Pageable pageable);
+
+    Page<Attendance> findByTenantIdAndEmployeeIdAndClockInAtBetweenOrderByClockInAtDesc(
+            UUID tenantId, UUID employeeId, Instant from, Instant to, Pageable pageable);
 
     List<Attendance> findByTenantIdAndClockInAtBetweenOrderByClockInAtDesc(
             UUID tenantId, Instant from, Instant to);

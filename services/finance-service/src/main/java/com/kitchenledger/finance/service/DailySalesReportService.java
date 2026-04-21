@@ -7,6 +7,7 @@ import com.kitchenledger.finance.exception.ResourceNotFoundException;
 import com.kitchenledger.finance.exception.ValidationException;
 import com.kitchenledger.finance.model.DailySalesReport;
 import com.kitchenledger.finance.repository.DailySalesReportRepository;
+import com.kitchenledger.finance.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -128,7 +129,7 @@ public class DailySalesReportService {
         dsr.setApprovedBy(approvedBy);
         dsr.setFinalizedAt(Instant.now());
         DailySalesReport saved = dsrRepository.save(dsr);
-        eventPublisher.publishDsrReconciled(tenantId, saved);
+        eventPublisher.publishDsrReconciled(tenantId, saved, TenantContext.getCurrency());
         return saved;
     }
 
@@ -150,7 +151,8 @@ public class DailySalesReportService {
         if (variance.abs().compareTo(CASH_DISCREPANCY_THRESHOLD) > 0) {
             dsr.setRequiresInvestigation(true);
             DailySalesReport saved = dsrRepository.save(dsr);
-            eventPublisher.publishCashDiscrepancy(saved, expectedCash, actualCash, variance);
+            eventPublisher.publishCashDiscrepancy(saved, expectedCash, actualCash, variance,
+                    TenantContext.getCurrency());
             return saved;
         }
 

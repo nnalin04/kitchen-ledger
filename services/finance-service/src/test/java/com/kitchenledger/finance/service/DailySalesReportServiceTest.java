@@ -88,7 +88,7 @@ class DailySalesReportServiceTest {
         // Actual = expected → no discrepancy
         dsrService.reconcile(tenantId, dsrId, new BigDecimal("5000.00"));
 
-        verify(eventPublisher, never()).publishCashDiscrepancy(any(), any(), any(), any());
+        verify(eventPublisher, never()).publishCashDiscrepancy(any(), any(), any(), any(), any());
         assertThat(dsr.getCashOverShort()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
@@ -107,7 +107,7 @@ class DailySalesReportServiceTest {
         dsrService.reconcile(tenantId, dsrId, new BigDecimal("4850.00"));
 
         verify(eventPublisher).publishCashDiscrepancy(eq(dsr), eq(new BigDecimal("5000.00")),
-                eq(new BigDecimal("4850.00")), any());
+                eq(new BigDecimal("4850.00")), any(), any());
         assertThat(dsr.isRequiresInvestigation()).isTrue();
     }
 
@@ -125,7 +125,7 @@ class DailySalesReportServiceTest {
         // Variance = 5000 - 4995 = -5 (< threshold of 10)
         dsrService.reconcile(tenantId, dsrId, new BigDecimal("4995.00"));
 
-        verify(eventPublisher, never()).publishCashDiscrepancy(any(), any(), any(), any());
+        verify(eventPublisher, never()).publishCashDiscrepancy(any(), any(), any(), any(), any());
         assertThat(dsr.isRequiresInvestigation()).isFalse();
     }
 
