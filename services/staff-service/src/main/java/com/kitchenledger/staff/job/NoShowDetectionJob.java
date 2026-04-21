@@ -9,6 +9,9 @@ import com.kitchenledger.staff.repository.EmployeeRepository;
 import com.kitchenledger.staff.repository.ShiftRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -34,33 +37,47 @@ public class NoShowDetectionJob {
     private final EmployeeRepository    employeeRepository;
     private final StaffEventPublisher   eventPublisher;
 
+    private static final int BATCH_SIZE = 100;
+
     @Scheduled(cron = "0 */15 * * * *") // every 15 minutes
     public void detectNoShows() {
-        LocalDate today          = LocalDate.now();
+        log.info("NoShowDetectionJob starting — batch size {}", BATCH_SIZE);
+
+        LocalDate today         = LocalDate.now();
         // Threshold: shifts that started more than 15 minutes ago
-        LocalTime thresholdTime  = LocalTime.now().minusMinutes(15);
+        LocalTime thresholdTime = LocalTime.now().minusMinutes(15);
 
-        List<Shift> overdueShifts = shiftRepository
-            .findByStatusInAndShiftDateAndStartTimeBefore(
-                List.of(ShiftStatus.scheduled, ShiftStatus.published, ShiftStatus.confirmed),
-                today, thresholdTime);
+        List<ShiftStatus> liveStatuses =
+                List.of(ShiftStatus.scheduled, ShiftStatus.published, ShiftStatus.confirmed);
 
-        if (overdueShifts.isEmpty()) return;
+        int pageNumber  = 0;
+        int totalFound  = 0;
+        int failures    = 0;
 
-        log.info("No-show check: {} overdue live shift(s) found", overdueShifts.size());
+        Page<Shift> page;
+        do {
+            PageRequest pageable = PageRequest.of(pageNumber, BATCH_SIZE, Sort.by("id"));
+            page = shiftRepository.findByStatusInAndShiftDateAndStartTimeBefore(
+                    liveStatuses, today, thresholdTime, pageable);
 
-        int failures = 0;
-        for (Shift shift : overdueShifts) {
-            try {
-                processOneShift(shift);
-            // Intentionally broad: job must not abort remaining items on any single failure
-            } catch (Exception e) {
-                failures++;
-                log.error("NoShowDetectionJob failed for tenant {}: {}", shift.getTenantId(), e.getMessage());
+            if (page.isEmpty()) break;
+
+            log.info("No-show check page {}: {} overdue shift(s)", pageNumber, page.getNumberOfElements());
+            totalFound += page.getNumberOfElements();
+
+            for (Shift shift : page) {
+                try {
+                    processOneShift(shift);
+                // Intentionally broad: job must not abort remaining items on any single failure
+                } catch (Exception e) {
+                    failures++;
+                    log.error("NoShowDetectionJob failed for tenant {}: {}", shift.getTenantId(), e.getMessage());
+                }
             }
-        }
-        log.info("NoShowDetectionJob completed: {} shifts processed, {} failed",
-                overdueShifts.size(), failures);
+            pageNumber++;
+        } while (page.getNumberOfElements() == BATCH_SIZE);
+
+        log.info("NoShowDetectionJob completed: {} shifts processed, {} failed", totalFound, failures);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

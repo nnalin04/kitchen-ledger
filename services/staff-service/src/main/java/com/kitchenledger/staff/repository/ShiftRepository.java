@@ -2,6 +2,8 @@ package com.kitchenledger.staff.repository;
 
 import com.kitchenledger.staff.model.Shift;
 import com.kitchenledger.staff.model.enums.ShiftStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
@@ -29,6 +31,10 @@ public interface ShiftRepository extends JpaRepository<Shift, UUID> {
     /** Find all live (scheduled OR published OR confirmed) shifts for today that started before threshold. */
     List<Shift> findByStatusInAndShiftDateAndStartTimeBefore(
             List<ShiftStatus> statuses, LocalDate shiftDate, LocalTime startTimeBefore);
+
+    /** Paginated overload used by NoShowDetectionJob to avoid unbounded in-memory loads. */
+    Page<Shift> findByStatusInAndShiftDateAndStartTimeBefore(
+            List<ShiftStatus> statuses, LocalDate shiftDate, LocalTime startTimeBefore, Pageable pageable);
 
     /**
      * Check for overlapping shifts for the same employee on the same date.
