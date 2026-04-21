@@ -40,7 +40,7 @@ class ExpenseServiceTest {
     void createFromOcr_createsExpenseWithOcrPrefix() {
         when(expenseRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        expenseService.createFromOcr(tenantId, Map.of(
+        expenseService.createFromOcr(tenantId, null, Map.of(
                 "result", Map.of(
                         "vendor_name",  "Fresh Mart",
                         "total_amount", "1500.00",
@@ -62,15 +62,15 @@ class ExpenseServiceTest {
         assertThat(saved.getReceiptUrl()).isEqualTo("https://storage/receipt.jpg");
         assertThat(saved.getPaymentMethod()).isEqualTo(PaymentMethod.cash);
         assertThat(saved.getTenantId()).isEqualTo(tenantId);
-        // System user — nil UUID
-        assertThat(saved.getCreatedBy()).isEqualTo(new UUID(0L, 0L));
+        // initiatedBy is null when called from system context (ai-service)
+        assertThat(saved.getCreatedBy()).isNull();
     }
 
     @Test
     void createFromOcr_missingDate_defaultsToToday() {
         when(expenseRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        expenseService.createFromOcr(tenantId, Map.of(
+        expenseService.createFromOcr(tenantId, null, Map.of(
                 "result", Map.of(
                         "total_amount", "500"
                 )
@@ -86,7 +86,7 @@ class ExpenseServiceTest {
     void createFromOcr_missingCategory_defaultsToOther() {
         when(expenseRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        expenseService.createFromOcr(tenantId, Map.of(
+        expenseService.createFromOcr(tenantId, null, Map.of(
                 "result", Map.of("total_amount", "100")
         ));
 
@@ -97,7 +97,7 @@ class ExpenseServiceTest {
 
     @Test
     void createFromOcr_nullResult_skipsWithoutSaving() {
-        expenseService.createFromOcr(tenantId, Map.of());
+        expenseService.createFromOcr(tenantId, null, Map.of());
 
         verify(expenseRepository, never()).save(any());
     }
@@ -106,7 +106,7 @@ class ExpenseServiceTest {
     void createFromOcr_invalidAmountFormat_usesOne() {
         when(expenseRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        expenseService.createFromOcr(tenantId, Map.of(
+        expenseService.createFromOcr(tenantId, null, Map.of(
                 "result", Map.of("total_amount", "N/A")
         ));
 
@@ -120,7 +120,7 @@ class ExpenseServiceTest {
     void createFromOcr_publishesExpenseCreatedEvent() {
         when(expenseRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        expenseService.createFromOcr(tenantId, Map.of(
+        expenseService.createFromOcr(tenantId, null, Map.of(
                 "result", Map.of("total_amount", "200")
         ));
 

@@ -49,32 +49,40 @@ public class NoShowDetectionJob {
 
         log.debug("No-show check: {} overdue live shift(s) found", overdueShifts.size());
 
+        int failures = 0;
         for (Shift shift : overdueShifts) {
-            boolean hasClockedIn = attendanceRepository
-                .existsByShiftIdAndTenantId(shift.getId(), shift.getTenantId());
+            try {
+                boolean hasClockedIn = attendanceRepository
+                    .existsByShiftIdAndTenantId(shift.getId(), shift.getTenantId());
 
-            if (!hasClockedIn) {
-                shift.setStatus(ShiftStatus.no_show);
-                shiftRepository.save(shift);
-                log.warn("No-show detected and marked: shift={} employee={} tenant={}",
-                    shift.getId(), shift.getEmployeeId(), shift.getTenantId());
+                if (!hasClockedIn) {
+                    shift.setStatus(ShiftStatus.no_show);
+                    shiftRepository.save(shift);
+                    log.warn("No-show detected and marked: shift={} employee={} tenant={}",
+                        shift.getId(), shift.getEmployeeId(), shift.getTenantId());
 
-                Optional<Employee> employeeOpt = employeeRepository
-                    .findByIdAndTenantIdAndDeletedAtIsNull(shift.getEmployeeId(), shift.getTenantId());
+                    Optional<Employee> employeeOpt = employeeRepository
+                        .findByIdAndTenantIdAndDeletedAtIsNull(shift.getEmployeeId(), shift.getTenantId());
 
-                String employeeName = employeeOpt
-                    .map(e -> e.getFirstName() + " " + e.getLastName())
-                    .orElse("Unknown Employee");
+                    String employeeName = employeeOpt
+                        .map(e -> e.getFirstName() + " " + e.getLastName())
+                        .orElse("Unknown Employee");
 
-                eventPublisher.publishEmployeeNoShow(
-                    shift.getTenantId(),
-                    shift.getId(),
-                    shift.getEmployeeId(),
-                    employeeName,
-                    shift.getShiftDate(),
-                    shift.getStartTime()
-                );
+                    eventPublisher.publishEmployeeNoShow(
+                        shift.getTenantId(),
+                        shift.getId(),
+                        shift.getEmployeeId(),
+                        employeeName,
+                        shift.getShiftDate(),
+                        shift.getStartTime()
+                    );
+                }
+            } catch (Exception e) {
+                failures++;
+                log.error("NoShowDetectionJob failed for tenant {}: {}", shift.getTenantId(), e.getMessage());
             }
         }
+        log.info("NoShowDetectionJob completed: {} shifts processed, {} failed",
+                overdueShifts.size(), failures);
     }
 }

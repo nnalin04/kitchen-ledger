@@ -101,4 +101,35 @@ class OverduePaymentJobTest {
         verify(vendorPaymentRepository).findDistinctTenantsWithOverdue(dateCaptor.capture());
         assertThat(dateCaptor.getValue()).isEqualTo(LocalDate.now());
     }
+
+    @Test
+    void shouldContinueProcessingRemainingTenantsWhenOneFails() {
+        UUID tenant1 = UUID.randomUUID();
+        UUID tenant2 = UUID.randomUUID();
+        UUID tenant3 = UUID.randomUUID();
+
+        VendorPayment vp1 = pendingOverdue(tenant1);
+        VendorPayment vp3 = pendingOverdue(tenant3);
+
+        when(vendorPaymentRepository.findDistinctTenantsWithOverdue(any(LocalDate.class)))
+                .thenReturn(List.of(tenant1, tenant2, tenant3));
+        when(vendorPaymentRepository.findOverdue(eq(tenant1), any(LocalDate.class)))
+                .thenReturn(List.of(vp1));
+        when(vendorPaymentRepository.findOverdue(eq(tenant2), any(LocalDate.class)))
+                .thenThrow(new RuntimeException("simulated failure"));
+        when(vendorPaymentRepository.findOverdue(eq(tenant3), any(LocalDate.class)))
+                .thenReturn(List.of(vp3));
+        when(vendorPaymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // Must not throw — job isolates per-tenant failures
+        overduePaymentJob.runCheck();
+
+        // Tenant 1 and 3 processed despite tenant 2 failing
+        verify(vendorPaymentRepository).findOverdue(eq(tenant1), any(LocalDate.class));
+        verify(vendorPaymentRepository).findOverdue(eq(tenant2), any(LocalDate.class));
+        verify(vendorPaymentRepository).findOverdue(eq(tenant3), any(LocalDate.class));
+        verify(eventPublisher).publishPaymentOverdue(vp1);
+        verify(eventPublisher).publishPaymentOverdue(vp3);
+        verify(eventPublisher, never()).publishPaymentOverdue(argThat(p -> p.getTenantId().equals(tenant2)));
+    }
 }

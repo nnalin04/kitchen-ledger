@@ -75,7 +75,7 @@ class FinanceEventListenerTest {
 
         financeEventListener.onEvent(envelope);
 
-        verify(expenseService).createFromOcr(eq(tenantId), any());
+        verify(expenseService).createFromOcr(eq(tenantId), any(), any());
     }
 
     @Test
@@ -91,7 +91,7 @@ class FinanceEventListenerTest {
 
         financeEventListener.onEvent(envelope);
 
-        verify(expenseService).createFromOcr(eq(tenantId), any());
+        verify(expenseService).createFromOcr(eq(tenantId), any(), any());
     }
 
     @Test
@@ -104,7 +104,7 @@ class FinanceEventListenerTest {
 
         financeEventListener.onEvent(envelope);
 
-        verify(expenseService, never()).createFromOcr(any(), any());
+        verify(expenseService, never()).createFromOcr(any(), any(), any());
     }
 
     @Test
@@ -117,7 +117,7 @@ class FinanceEventListenerTest {
 
         financeEventListener.onEvent(envelope);
 
-        verify(expenseService, never()).createFromOcr(any(), any());
+        verify(expenseService, never()).createFromOcr(any(), any(), any());
     }
 
     // ── unknown event ─────────────────────────────────────────────────────────
@@ -133,6 +133,6 @@ class FinanceEventListenerTest {
         financeEventListener.onEvent(envelope);
 
         verify(accountService, never()).seedDefaultAccounts(any());
-        verify(expenseService, never()).createFromOcr(any(), any());
+        verify(expenseService, never()).createFromOcr(any(), any(), any());
     }
 }

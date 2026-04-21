@@ -127,4 +127,28 @@ class ExpiryCheckJobTest {
 
         verify(eventPublisher, times(2)).publishStockExpiring(any(), any(), any(), anyInt());
     }
+
+    @Test
+    void shouldContinueProcessingRemainingTenantsWhenOneFails() {
+        UUID itemId1 = UUID.randomUUID();
+        UUID itemId2 = UUID.randomUUID();
+        UUID itemId3 = UUID.randomUUID();
+        StockReceiptItem b1 = expiringBatch(itemId1, 1);
+        StockReceiptItem b2 = expiringBatch(itemId2, 1);
+        StockReceiptItem b3 = expiringBatch(itemId3, 1);
+
+        when(receiptItemRepository.findAllExpiringSoon(any())).thenReturn(List.of(b1, b2, b3));
+        when(itemRepository.findById(itemId1)).thenReturn(Optional.of(item(itemId1)));
+        when(itemRepository.findById(itemId2)).thenThrow(new RuntimeException("simulated failure"));
+        when(itemRepository.findById(itemId3)).thenReturn(Optional.of(item(itemId3)));
+
+        // Must not throw — job isolates per-batch failures
+        expiryCheckJob.runCheck();
+
+        // Batch 1 and batch 3 processed despite batch 2 failing
+        verify(itemRepository).findById(itemId1);
+        verify(itemRepository).findById(itemId2);
+        verify(itemRepository).findById(itemId3);
+        verify(eventPublisher, times(2)).publishStockExpiring(any(), any(), any(), anyInt());
+    }
 }

@@ -28,9 +28,17 @@ public class OverduePaymentJob {
         // so payments are always scoped to their tenant — no cross-tenant data mixing.
         List<UUID> tenants = vendorPaymentRepository.findDistinctTenantsWithOverdue(today);
         log.info("OverduePaymentJob: {} tenant(s) have overdue payments", tenants.size());
+        int failures = 0;
         for (UUID tenantId : tenants) {
-            processForTenant(tenantId, today);
+            try {
+                processForTenant(tenantId, today);
+            } catch (Exception e) {
+                failures++;
+                log.error("OverduePaymentJob failed for tenant {}: {}", tenantId, e.getMessage());
+            }
         }
+        log.info("OverduePaymentJob completed: {} tenants processed, {} failed",
+                tenants.size(), failures);
     }
 
     @Transactional

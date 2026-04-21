@@ -34,9 +34,17 @@ public class ExpiryCheckJob {
 
         log.info("ExpiryCheckJob: found {} expiring batches (threshold={})", expiring.size(), threshold);
 
+        int failures = 0;
         for (StockReceiptItem batch : expiring) {
-            publishAlert(batch);
+            try {
+                publishAlert(batch);
+            } catch (Exception e) {
+                failures++;
+                log.error("ExpiryCheckJob failed for batch {}: {}", batch.getId(), e.getMessage());
+            }
         }
+        log.info("ExpiryCheckJob completed: {} batches processed, {} failed",
+                expiring.size(), failures);
     }
 
     private void publishAlert(StockReceiptItem batch) {

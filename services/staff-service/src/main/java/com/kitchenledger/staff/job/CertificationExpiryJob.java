@@ -45,31 +45,39 @@ public class CertificationExpiryJob {
         log.debug("Certification expiry check: {} cert(s) expiring within {} days",
                 expiringSoon.size(), ALERT_DAYS_AHEAD);
 
+        int failures = 0;
         for (Certification cert : expiringSoon) {
-            if (cert.getExpiryDate() == null) continue;
+            try {
+                if (cert.getExpiryDate() == null) continue;
 
-            // Auto-expire overdue certs
-            if (cert.getExpiryDate().isBefore(today)) {
-                cert.setStatus(CertificationStatus.EXPIRED);
-                certificationRepository.save(cert);
-                log.info("Auto-expired certification {} for employee {}", cert.getCertName(), cert.getEmployeeId());
-                continue;
+                // Auto-expire overdue certs
+                if (cert.getExpiryDate().isBefore(today)) {
+                    cert.setStatus(CertificationStatus.EXPIRED);
+                    certificationRepository.save(cert);
+                    log.info("Auto-expired certification {} for employee {}", cert.getCertName(), cert.getEmployeeId());
+                    continue;
+                }
+
+                // Fire expiry alert for certs still active but approaching expiry
+                employeeRepository.findByIdAndTenantIdAndDeletedAtIsNull(cert.getEmployeeId(), cert.getTenantId())
+                        .ifPresent(emp -> {
+                            String employeeName = emp.getFirstName() + " " + emp.getLastName();
+                            eventPublisher.publishCertificationExpiring(
+                                    cert.getTenantId(),
+                                    cert.getEmployeeId(),
+                                    employeeName,
+                                    cert.getCertName(),
+                                    cert.getExpiryDate().toString()
+                            );
+                            log.info("Certification expiry alert fired for {} — cert '{}' expires {}",
+                                    employeeName, cert.getCertName(), cert.getExpiryDate());
+                        });
+            } catch (Exception e) {
+                failures++;
+                log.error("CertificationExpiryJob failed for tenant {}: {}", cert.getTenantId(), e.getMessage());
             }
-
-            // Fire expiry alert for certs still active but approaching expiry
-            employeeRepository.findByIdAndTenantIdAndDeletedAtIsNull(cert.getEmployeeId(), cert.getTenantId())
-                    .ifPresent(emp -> {
-                        String employeeName = emp.getFirstName() + " " + emp.getLastName();
-                        eventPublisher.publishCertificationExpiring(
-                                cert.getTenantId(),
-                                cert.getEmployeeId(),
-                                employeeName,
-                                cert.getCertName(),
-                                cert.getExpiryDate().toString()
-                        );
-                        log.info("Certification expiry alert fired for {} — cert '{}' expires {}",
-                                employeeName, cert.getCertName(), cert.getExpiryDate());
-                    });
         }
+        log.info("CertificationExpiryJob completed: {} certs processed, {} failed",
+                expiringSoon.size(), failures);
     }
 }
