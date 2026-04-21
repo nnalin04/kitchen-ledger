@@ -40,7 +40,8 @@ public class ExpiryCheckJob {
                 publishAlert(batch);
             } catch (Exception e) {
                 failures++;
-                log.error("ExpiryCheckJob failed for batch {}: {}", batch.getId(), e.getMessage());
+                log.error("ExpiryCheckJob failed for batch {} (inventoryItemId={}): {}",
+                        batch.getId(), batch.getInventoryItemId(), e.getMessage());
             }
         }
         log.info("ExpiryCheckJob completed: {} batches processed, {} failed",
