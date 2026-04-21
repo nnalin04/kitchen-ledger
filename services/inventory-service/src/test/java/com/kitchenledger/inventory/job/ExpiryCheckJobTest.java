@@ -129,7 +129,7 @@ class ExpiryCheckJobTest {
     }
 
     @Test
-    void shouldContinueProcessingRemainingTenantsWhenOneFails() {
+    void shouldContinueProcessingRemainingBatchesWhenOneFails() {
         UUID itemId1 = UUID.randomUUID();
         UUID itemId2 = UUID.randomUUID();
         UUID itemId3 = UUID.randomUUID();

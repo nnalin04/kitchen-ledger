@@ -142,7 +142,7 @@ class CertificationExpiryJobTest {
     // ── Per-tenant isolation ──────────────────────────────────────────────────
 
     @Test
-    void shouldContinueProcessingRemainingTenantsWhenOneFails() {
+    void shouldContinueProcessingRemainingBatchesWhenOneFails() {
         LocalDate expiresIn7Days = LocalDate.now().plusDays(7);
 
         // Three distinct tenants / employees so stubs are unambiguous

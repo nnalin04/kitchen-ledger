@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -34,7 +35,6 @@ public class NoShowDetectionJob {
     private final StaffEventPublisher   eventPublisher;
 
     @Scheduled(cron = "0 */15 * * * *") // every 15 minutes
-    @Transactional
     public void detectNoShows() {
         LocalDate today          = LocalDate.now();
         // Threshold: shifts that started more than 15 minutes ago
@@ -47,36 +47,13 @@ public class NoShowDetectionJob {
 
         if (overdueShifts.isEmpty()) return;
 
-        log.debug("No-show check: {} overdue live shift(s) found", overdueShifts.size());
+        log.info("No-show check: {} overdue live shift(s) found", overdueShifts.size());
 
         int failures = 0;
         for (Shift shift : overdueShifts) {
             try {
-                boolean hasClockedIn = attendanceRepository
-                    .existsByShiftIdAndTenantId(shift.getId(), shift.getTenantId());
-
-                if (!hasClockedIn) {
-                    shift.setStatus(ShiftStatus.no_show);
-                    shiftRepository.save(shift);
-                    log.warn("No-show detected and marked: shift={} employee={} tenant={}",
-                        shift.getId(), shift.getEmployeeId(), shift.getTenantId());
-
-                    Optional<Employee> employeeOpt = employeeRepository
-                        .findByIdAndTenantIdAndDeletedAtIsNull(shift.getEmployeeId(), shift.getTenantId());
-
-                    String employeeName = employeeOpt
-                        .map(e -> e.getFirstName() + " " + e.getLastName())
-                        .orElse("Unknown Employee");
-
-                    eventPublisher.publishEmployeeNoShow(
-                        shift.getTenantId(),
-                        shift.getId(),
-                        shift.getEmployeeId(),
-                        employeeName,
-                        shift.getShiftDate(),
-                        shift.getStartTime()
-                    );
-                }
+                processOneShift(shift);
+            // Intentionally broad: job must not abort remaining items on any single failure
             } catch (Exception e) {
                 failures++;
                 log.error("NoShowDetectionJob failed for tenant {}: {}", shift.getTenantId(), e.getMessage());
@@ -84,5 +61,34 @@ public class NoShowDetectionJob {
         }
         log.info("NoShowDetectionJob completed: {} shifts processed, {} failed",
                 overdueShifts.size(), failures);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void processOneShift(Shift shift) {
+        boolean hasClockedIn = attendanceRepository
+            .existsByShiftIdAndTenantId(shift.getId(), shift.getTenantId());
+
+        if (!hasClockedIn) {
+            shift.setStatus(ShiftStatus.no_show);
+            shiftRepository.save(shift);
+            log.warn("No-show detected and marked: shift={} employee={} tenant={}",
+                shift.getId(), shift.getEmployeeId(), shift.getTenantId());
+
+            Optional<Employee> employeeOpt = employeeRepository
+                .findByIdAndTenantIdAndDeletedAtIsNull(shift.getEmployeeId(), shift.getTenantId());
+
+            String employeeName = employeeOpt
+                .map(e -> e.getFirstName() + " " + e.getLastName())
+                .orElse("Unknown Employee");
+
+            eventPublisher.publishEmployeeNoShow(
+                shift.getTenantId(),
+                shift.getId(),
+                shift.getEmployeeId(),
+                employeeName,
+                shift.getShiftDate(),
+                shift.getStartTime()
+            );
+        }
     }
 }

@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -31,47 +32,23 @@ public class CertificationExpiryJob {
     private final StaffEventPublisher eventPublisher;
 
     @Scheduled(cron = "0 0 8 * * *") // 08:00 every day
-    @Transactional
     public void checkCertificationExpiry() {
         LocalDate today            = LocalDate.now();
         LocalDate alertThreshold   = today.plusDays(ALERT_DAYS_AHEAD);
-        LocalDate yesterday        = today.minusDays(1);
 
         // Alert: certs expiring within next 30 days
         List<Certification> expiringSoon = certificationRepository
                 .findByStatusAndExpiryDateBeforeAndDeletedAtIsNull(
                         CertificationStatus.ACTIVE, alertThreshold);
 
-        log.debug("Certification expiry check: {} cert(s) expiring within {} days",
+        log.info("Certification expiry check: {} cert(s) expiring within {} days",
                 expiringSoon.size(), ALERT_DAYS_AHEAD);
 
         int failures = 0;
         for (Certification cert : expiringSoon) {
             try {
-                if (cert.getExpiryDate() == null) continue;
-
-                // Auto-expire overdue certs
-                if (cert.getExpiryDate().isBefore(today)) {
-                    cert.setStatus(CertificationStatus.EXPIRED);
-                    certificationRepository.save(cert);
-                    log.info("Auto-expired certification {} for employee {}", cert.getCertName(), cert.getEmployeeId());
-                    continue;
-                }
-
-                // Fire expiry alert for certs still active but approaching expiry
-                employeeRepository.findByIdAndTenantIdAndDeletedAtIsNull(cert.getEmployeeId(), cert.getTenantId())
-                        .ifPresent(emp -> {
-                            String employeeName = emp.getFirstName() + " " + emp.getLastName();
-                            eventPublisher.publishCertificationExpiring(
-                                    cert.getTenantId(),
-                                    cert.getEmployeeId(),
-                                    employeeName,
-                                    cert.getCertName(),
-                                    cert.getExpiryDate().toString()
-                            );
-                            log.info("Certification expiry alert fired for {} — cert '{}' expires {}",
-                                    employeeName, cert.getCertName(), cert.getExpiryDate());
-                        });
+                processOneCert(cert, today);
+            // Intentionally broad: job must not abort remaining items on any single failure
             } catch (Exception e) {
                 failures++;
                 log.error("CertificationExpiryJob failed for tenant {}: {}", cert.getTenantId(), e.getMessage());
@@ -79,5 +56,33 @@ public class CertificationExpiryJob {
         }
         log.info("CertificationExpiryJob completed: {} certs processed, {} failed",
                 expiringSoon.size(), failures);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void processOneCert(Certification cert, LocalDate today) {
+        if (cert.getExpiryDate() == null) return;
+
+        // Auto-expire overdue certs
+        if (cert.getExpiryDate().isBefore(today)) {
+            cert.setStatus(CertificationStatus.EXPIRED);
+            certificationRepository.save(cert);
+            log.info("Auto-expired certification {} for employee {}", cert.getCertName(), cert.getEmployeeId());
+            return;
+        }
+
+        // Fire expiry alert for certs still active but approaching expiry
+        employeeRepository.findByIdAndTenantIdAndDeletedAtIsNull(cert.getEmployeeId(), cert.getTenantId())
+                .ifPresent(emp -> {
+                    String employeeName = emp.getFirstName() + " " + emp.getLastName();
+                    eventPublisher.publishCertificationExpiring(
+                            cert.getTenantId(),
+                            cert.getEmployeeId(),
+                            employeeName,
+                            cert.getCertName(),
+                            cert.getExpiryDate().toString()
+                    );
+                    log.info("Certification expiry alert fired for {} — cert '{}' expires {}",
+                            employeeName, cert.getCertName(), cert.getExpiryDate());
+                });
     }
 }

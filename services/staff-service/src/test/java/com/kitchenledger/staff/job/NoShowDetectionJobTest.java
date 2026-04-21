@@ -134,7 +134,7 @@ class NoShowDetectionJobTest {
     // ── Per-tenant isolation ──────────────────────────────────────────────────
 
     @Test
-    void shouldContinueProcessingRemainingTenantsWhenOneFails() {
+    void shouldContinueProcessingRemainingBatchesWhenOneFails() {
         UUID tenant2   = UUID.randomUUID();
         UUID employee2 = UUID.randomUUID();
 
