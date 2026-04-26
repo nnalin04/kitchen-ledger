@@ -5,9 +5,14 @@ from app.core.config import settings
 
 celery_app = Celery(
     "ai-service",
-    broker=settings.rabbitmq_url,
-    backend=settings.redis_url,
-    include=["app.workers.tasks"],
+    broker=settings.redis_url,            # redis://redis:6379/0
+    backend=settings.redis_result_url,    # redis://redis:6379/1
+    include=[
+        "app.workers.tasks",
+        "app.workers.ocr_tasks",
+        "app.workers.voice_tasks",
+        "app.workers.forecast_tasks",
+    ],
 )
 
 celery_app.conf.update(

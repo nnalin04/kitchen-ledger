@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.main import NotFoundException
+from app.core.exceptions import NotFoundException
 from app.models.ai_job import AiJob
 from app.schemas.ai_job import JobResponse
 

@@ -57,7 +57,7 @@ def _mark_processing(db, job: AiJob) -> None:
 
 def _mark_completed(db, job: AiJob, result: dict[str, Any]) -> None:
     job.status = "completed"
-    job.result_data = result
+    job.result = result
     db.commit()
 
 
@@ -133,8 +133,8 @@ def process_ocr(self, job_id: str, file_url: str, tenant_id: str):
         try:
             job = _get_job(db, job_id)
             _mark_failed(db, job, str(exc)[:500])
-        except Exception:
-            pass
+        except Exception as mark_exc:
+            logger.error("Failed to mark OCR job %s as failed: %s", job_id, mark_exc)
         raise
     finally:
         db.close()
@@ -157,14 +157,14 @@ def _run_mindee_ocr(file_bytes: bytes, document_type: str) -> dict[str, Any]:
             "vendor_name": str(pred.supplier_name) if pred.supplier_name else None,
             "invoice_date": str(pred.date) if pred.date else None,
             "invoice_number": str(pred.invoice_number) if pred.invoice_number else None,
-            "total_amount": float(pred.total_amount.value) if pred.total_amount and pred.total_amount.value else None,
-            "tax_amount": float(pred.total_tax.value) if pred.total_tax and pred.total_tax.value else None,
+            "total_amount": str(pred.total_amount.value) if pred.total_amount and pred.total_amount.value else None,
+            "tax_amount": str(pred.total_tax.value) if pred.total_tax and pred.total_tax.value else None,
             "line_items": [
                 {
                     "description": str(item.description) if item.description else None,
                     "quantity": float(item.quantity.value) if item.quantity and item.quantity.value else None,
-                    "unit_price": float(item.unit_price.value) if item.unit_price and item.unit_price.value else None,
-                    "total_amount": float(item.total_amount.value) if item.total_amount and item.total_amount.value else None,
+                    "unit_price": str(item.unit_price.value) if item.unit_price and item.unit_price.value else None,
+                    "total_amount": str(item.total_amount.value) if item.total_amount and item.total_amount.value else None,
                 }
                 for item in (pred.line_items or [])
             ],
@@ -179,15 +179,15 @@ def _run_mindee_ocr(file_bytes: bytes, document_type: str) -> dict[str, Any]:
             "document_type": "receipt",
             "vendor_name": str(pred.supplier_name) if pred.supplier_name else None,
             "receipt_date": str(pred.date) if pred.date else None,
-            "total_amount": float(pred.total_amount.value) if pred.total_amount and pred.total_amount.value else None,
-            "tax_amount": float(pred.total_tax.value) if pred.total_tax and pred.total_tax.value else None,
+            "total_amount": str(pred.total_amount.value) if pred.total_amount and pred.total_amount.value else None,
+            "tax_amount": str(pred.total_tax.value) if pred.total_tax and pred.total_tax.value else None,
             "category": str(pred.category) if pred.category else None,
             "line_items": [
                 {
                     "description": str(item.description) if item.description else None,
                     "quantity": float(item.quantity.value) if item.quantity and item.quantity.value else None,
-                    "unit_price": float(item.unit_price.value) if item.unit_price and item.unit_price.value else None,
-                    "total_amount": float(item.total_amount.value) if item.total_amount and item.total_amount.value else None,
+                    "unit_price": str(item.unit_price.value) if item.unit_price and item.unit_price.value else None,
+                    "total_amount": str(item.total_amount.value) if item.total_amount and item.total_amount.value else None,
                 }
                 for item in (pred.line_items or [])
             ],
@@ -249,8 +249,8 @@ def process_voice_query(self, job_id: str, query: str, context: str | None, tena
         try:
             job = _get_job(db, job_id)
             _mark_failed(db, job, str(exc)[:500])
-        except Exception:
-            pass
+        except Exception as mark_exc:
+            logger.error("Failed to mark voice job %s as failed: %s", job_id, mark_exc)
         raise
     finally:
         db.close()

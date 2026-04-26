@@ -14,7 +14,7 @@ def _make_job(status="pending"):
     job = MagicMock()
     job.id = uuid.uuid4()
     job.status = status
-    job.result_data = None
+    job.result = None
     job.error_message = None
     return job
 
@@ -30,7 +30,7 @@ def test_job_created_with_pending_status():
     result = _get_job(mock_db, str(job.id))
 
     assert result.status == "pending"
-    assert result.result_data is None
+    assert result.result is None
     assert result.error_message is None
 
 
@@ -66,9 +66,9 @@ def test_job_transitions_to_completed_with_structured_data():
     _mark_completed(mock_db, job, result)
 
     assert job.status == "completed"
-    assert job.result_data["vendor_name"] == "FreshFarms Co"
-    assert job.result_data["total_amount"] == 8500.00
-    assert len(job.result_data["line_items"]) == 1
+    assert job.result["vendor_name"] == "FreshFarms Co"
+    assert job.result["total_amount"] == 8500.00
+    assert len(job.result["line_items"]) == 1
     mock_db.commit.assert_called_once()
 
 
@@ -84,7 +84,7 @@ def test_job_transitions_to_failed_on_provider_error():
 
     assert job.status == "failed"
     assert job.error_message == error_msg
-    assert job.result_data is None   # unchanged
+    assert job.result is None   # unchanged
     mock_db.commit.assert_called_once()
 
 

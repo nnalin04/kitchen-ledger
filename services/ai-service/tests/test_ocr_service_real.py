@@ -20,11 +20,8 @@ def _make_prediction_field(value):
 
 
 def _make_none_field():
-    """Simulate an optional Mindee field that has no detected value."""
-    m = MagicMock()
-    m.value = None
-    m.__str__ = MagicMock(return_value="")
-    return m
+    """Simulate an optional Mindee field that has no detected value (Mindee returns None)."""
+    return None
 
 
 def _make_invoice_line_item(description, quantity, unit_price, total_amount):
@@ -65,7 +62,7 @@ def test_extract_supplier_name_from_invoice_text(mock_settings):
     assert result["vendor_name"] == "Produce Plus Ltd"
     assert result["document_type"] == "invoice"
     assert result["invoice_number"] == "INV-0042"
-    assert result["total_amount"] == 3500.00
+    assert result["total_amount"] == "3500.0"  # M-1 fix: monetary fields are strings to avoid float rounding
 
 
 @patch("app.workers.tasks.settings")
@@ -98,10 +95,10 @@ def test_extract_line_items_from_invoice_text(mock_settings):
 
     assert len(result["line_items"]) == 2
     assert result["line_items"][0]["description"] == "Chicken Breast"
-    assert result["line_items"][0]["quantity"] == 10.0
-    assert result["line_items"][0]["unit_price"] == 250.00
+    assert result["line_items"][0]["quantity"] == 10.0  # quantity stays float
+    assert result["line_items"][0]["unit_price"] == "250.0"  # monetary → string
     assert result["line_items"][1]["description"] == "Basmati Rice (5kg)"
-    assert result["tax_amount"] == 765.00
+    assert result["tax_amount"] == "765.0"  # monetary → string
 
 
 @patch("app.workers.tasks.settings")
