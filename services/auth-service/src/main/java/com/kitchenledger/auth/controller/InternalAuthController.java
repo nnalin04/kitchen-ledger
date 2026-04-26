@@ -143,7 +143,11 @@ public class InternalAuthController {
         if (internalServiceSecret == null || internalServiceSecret.isBlank()) {
             throw new IllegalStateException("INTERNAL_SERVICE_SECRET is not configured");
         }
-        if (!internalServiceSecret.equals(secret)) {
+        // Use constant-time comparison to prevent timing side-channel attacks that
+        // could allow an attacker to enumerate the secret character-by-character.
+        if (!java.security.MessageDigest.isEqual(
+                internalServiceSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                (secret != null ? secret : "").getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
             throw new AccessDeniedException("Invalid internal service secret");
         }
     }

@@ -142,6 +142,14 @@ public class DailySalesReportService {
     public DailySalesReport reconcile(UUID tenantId, UUID id, BigDecimal actualCash) {
         DailySalesReport dsr = getById(tenantId, id);
 
+        // Idempotency guard — prevent double-reconciliation that would overwrite
+        // a previously recorded cash variance and fire duplicate events.
+        if (dsr.getCashCountActual() != null) {
+            throw new IllegalStateException(
+                    "DSR " + id + " has already been reconciled. " +
+                    "Use an adjustment entry to correct cash discrepancies.");
+        }
+
         BigDecimal expectedCash = dsr.getCashSales();
         BigDecimal variance     = actualCash.subtract(expectedCash);
 

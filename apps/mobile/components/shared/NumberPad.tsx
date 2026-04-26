@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Platform } from 'react-native';
 import { Colors, Spacing, FontSize, Radius } from '../../constants/theme';
 
 interface Props {
@@ -144,7 +144,9 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: '700',
     color: Colors.textPrimary,
-    fontVariant: ['tabular-nums'],
+    // fontVariant: ['tabular-nums'] is iOS-only; use a monospace font on Android
+    fontFamily: Platform.OS === 'ios' ? undefined : 'monospace',
+    ...(Platform.OS === 'ios' ? { fontVariant: ['tabular-nums'] as any } : {}),
   },
   unit: {
     fontSize: FontSize.xl,

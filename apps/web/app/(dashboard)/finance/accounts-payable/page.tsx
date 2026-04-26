@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import useSWR, { mutate } from 'swr';
 import { motion, AnimatePresence } from 'motion/react';
+import { RoleGuard } from '@/components/layout/RoleGuard';
 import { financeApi } from '@/lib/api/finance.api';
 import {
   Dialog,
@@ -148,6 +149,7 @@ export default function AccountsPayablePage() {
   const hasError = summaryError || agingError;
 
   return (
+    <RoleGuard allowedRoles={['owner']}>
     <motion.div
       className="space-y-6"
       initial={{ opacity: 0, y: 14 }}
@@ -387,5 +389,6 @@ export default function AccountsPayablePage() {
         )}
       </AnimatePresence>
     </motion.div>
+    </RoleGuard>
   );
 }

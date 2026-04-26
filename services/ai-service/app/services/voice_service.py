@@ -47,6 +47,9 @@ def transcribe(audio_bytes: bytes, language: str = "en") -> str:
     import io
     from openai import OpenAI
 
+    if not audio_bytes:
+        raise ValueError("audio_bytes cannot be empty")
+
     client = OpenAI(api_key=settings.openai_api_key)
 
     audio_file = io.BytesIO(audio_bytes)
@@ -98,7 +101,11 @@ def parse_command(
     )
 
     raw = response.choices[0].message.content or "{}"
-    parsed = json.loads(raw)
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.warning("parse_command: JSON decode failed (%s), returning empty result", exc)
+        parsed = {}
 
     # Ensure quantity is numeric
     if "quantity" in parsed and parsed["quantity"] is not None:

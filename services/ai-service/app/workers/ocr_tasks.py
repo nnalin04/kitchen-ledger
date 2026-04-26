@@ -21,10 +21,16 @@ logger = logging.getLogger(__name__)
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-def _get_job(db, job_id: str) -> AiJob:
-    job = db.query(AiJob).filter(AiJob.id == job_id).first()
+def _get_job(db, job_id: str, tenant_id: str) -> AiJob:
+    # Include tenant_id in the query to prevent cross-tenant job access if a
+    # worker is somehow dispatched with a mismatched job_id.
+    from uuid import UUID
+    job = db.query(AiJob).filter(
+        AiJob.id == UUID(job_id),
+        AiJob.tenant_id == UUID(tenant_id),
+    ).first()
     if not job:
-        raise ValueError(f"AiJob {job_id} not found")
+        raise ValueError(f"AiJob {job_id} not found for tenant {tenant_id}")
     return job
 
 
@@ -97,7 +103,7 @@ def process_notebook_ocr(
     start_ms = int(time.time() * 1000)
     db = SessionLocal()
     try:
-        job = _get_job(db, job_id)
+        job = _get_job(db, job_id, tenant_id)
         _mark_processing(db, job)
 
         # 1. Download image
@@ -160,7 +166,7 @@ def process_notebook_ocr(
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=countdown)
         try:
-            job = _get_job(db, job_id)
+            job = _get_job(db, job_id, tenant_id)
             _mark_failed(db, job, str(exc))
         except Exception as mark_exc:
             logger.error("Failed to mark job %s as failed: %s", job_id, mark_exc)
@@ -192,7 +198,7 @@ def process_receipt_ocr(self, job_id: str, file_url: str, tenant_id: str):
     start_ms = int(time.time() * 1000)
     db = SessionLocal()
     try:
-        job = _get_job(db, job_id)
+        job = _get_job(db, job_id, tenant_id)
         _mark_processing(db, job)
 
         image_bytes = _download_file(file_url)
@@ -249,7 +255,7 @@ def process_receipt_ocr(self, job_id: str, file_url: str, tenant_id: str):
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=countdown)
         try:
-            job = _get_job(db, job_id)
+            job = _get_job(db, job_id, tenant_id)
             _mark_failed(db, job, str(exc))
         except Exception as mark_exc:
             logger.error("Failed to mark job %s as failed: %s", job_id, mark_exc)

@@ -54,9 +54,16 @@ public class WasteLogService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Inventory item not found: " + req.getInventoryItemId()));
 
-        // Decrement stock (quantity in the request's unit — assumes it's already in count_unit)
+        // Validate waste quantity does not exceed current stock.
+        // Silently clamping to zero would hide data entry errors and produce
+        // incorrect COGS calculations — fail loudly instead.
         BigDecimal newStock = item.getCurrentStock().subtract(req.getQuantity());
-        item.setCurrentStock(newStock.max(BigDecimal.ZERO));
+        if (newStock.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException(
+                    String.format("Waste quantity %.3f %s exceeds current stock %.3f for item '%s'.",
+                            req.getQuantity(), req.getUnit(), item.getCurrentStock(), item.getName()));
+        }
+        item.setCurrentStock(newStock);
         itemRepository.save(item);
 
         // FEFO: if the item is perishable (or we have tracked batches), allocate from

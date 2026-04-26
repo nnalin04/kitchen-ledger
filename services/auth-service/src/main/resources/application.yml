@@ -2,7 +2,7 @@ server:
   port: ${SERVER_PORT:8081}
   error:
     include-stacktrace: never
-    include-message: always
+    include-message: never
     include-binding-errors: never
 
 spring:

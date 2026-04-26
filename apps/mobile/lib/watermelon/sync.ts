@@ -4,10 +4,17 @@ import { AppState, AppStateStatus } from 'react-native';
 import { database } from './database';
 import { apiClient } from '../api/client';
 
+// Mutex flag — prevents concurrent sync runs from setInterval + AppState listener
+// firing at the same time, which could cause duplicate pushes.
+let isSyncing = false;
+
 export async function syncDatabase(): Promise<void> {
+  if (isSyncing) return;
   const netState = await NetInfo.fetch();
   if (!netState.isConnected) return;
 
+  isSyncing = true;
+  try {
   await synchronize({
     database,
     pullChanges: async ({ lastPulledAt }) => {
@@ -49,6 +56,9 @@ export async function syncDatabase(): Promise<void> {
     },
     migrationsEnabledAtVersion: 1,
   });
+  } finally {
+    isSyncing = false;
+  }
 }
 
 let syncInterval: ReturnType<typeof setInterval> | null = null;

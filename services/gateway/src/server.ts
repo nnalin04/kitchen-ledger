@@ -9,6 +9,10 @@ import { registerProxies } from './routes/proxy';
 import { registerHealthRoutes } from './routes/health';
 
 const app = Fastify({
+  // trustProxy: true reads X-Forwarded-For from Google Cloud Load Balancer,
+  // so req.ip resolves to the real client IP. Without this, all clients share
+  // the load-balancer IP as rate-limit key, making brute-force protection useless.
+  trustProxy: true,
   logger: {
     level: config.NODE_ENV === 'production' ? 'info' : 'debug',
     transport: config.NODE_ENV !== 'production'
@@ -96,17 +100,24 @@ async function bootstrap(): Promise<void> {
       if (rule.methods && !rule.methods.includes(method)) continue;
 
       const key = `rl:${rule.path.replaceAll('/', ':')}:${req.ip}`;
-      const count = await redisClient.incr(key);
-      if (count === 1) await redisClient.expire(key, rule.windowSecs);
+      try {
+        const count = await redisClient.incr(key);
+        if (count === 1) await redisClient.expire(key, rule.windowSecs);
 
-      if (count > rule.max) {
-        return reply.code(429).send({
-          success: false,
-          error: {
-            code: 'TOO_MANY_REQUESTS',
-            message: `Rate limit exceeded. Try again in ${rule.windowSecs / 60} minute(s).`,
-          },
-        });
+        if (count > rule.max) {
+          return reply.code(429).send({
+            success: false,
+            error: {
+              code: 'TOO_MANY_REQUESTS',
+              message: `Rate limit exceeded. Try again in ${rule.windowSecs / 60} minute(s).`,
+            },
+          });
+        }
+      } catch {
+        // Redis unavailable → fail open (allow request) to avoid blocking
+        // legitimate traffic during a cache outage. Global rate limit also
+        // fails open (default @fastify/rate-limit behaviour), so this is consistent.
+        app.log.warn({ path: rule.path }, 'Per-route rate limit: Redis unavailable, failing open');
       }
       break; // first matching rule wins
     }

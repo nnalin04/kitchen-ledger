@@ -222,7 +222,11 @@ async def process_query(
 
     # Execute selected tools
     for tc in tool_calls:
-        args = json.loads(tc.function.arguments or "{}")
+        try:
+            args = json.loads(tc.function.arguments or "{}")
+        except json.JSONDecodeError as exc:
+            logger.warning("nl_query: JSON decode failed for tool args (%s), skipping tool %s", exc, tc.function.name)
+            args = {}
         result = await _execute_tool(tc.function.name, args, tenant_id)
         tool_results[tc.function.name] = result
 

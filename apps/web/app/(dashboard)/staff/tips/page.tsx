@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import useSWR from 'swr';
 import { motion, AnimatePresence } from 'motion/react';
+import { RoleGuard } from '@/components/layout/RoleGuard';
 import { staffApi } from '@/lib/api/staff.api';
 
 // ─── types & helpers ─────────────────────────────────────────────────────────
@@ -559,6 +560,7 @@ export default function TipsPage() {
   }
 
   return (
+    <RoleGuard allowedRoles={['owner', 'manager']}>
     <motion.div
       className="space-y-4"
       initial={{ opacity: 0, y: 14 }}
@@ -697,5 +699,6 @@ export default function TipsPage() {
         />
       )}
     </motion.div>
+    </RoleGuard>
   );
 }

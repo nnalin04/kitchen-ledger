@@ -233,7 +233,8 @@ log "✓ Support services deployed"
 deploy_service_with_extra_secrets gateway \
   "INTERNAL_SERVICE_SECRET=$(secret_ref INTERNAL_SERVICE_SECRET),\
 JWT_PUBLIC_KEY=$(secret_ref JWT_PUBLIC_KEY),\
-REDIS_URL=$(secret_ref REDIS_URL)"
+REDIS_URL=$(secret_ref REDIS_URL),\
+ALLOWED_ORIGINS=$(secret_ref ALLOWED_ORIGINS)"
 
 # 6. Smoke test
 smoke_test

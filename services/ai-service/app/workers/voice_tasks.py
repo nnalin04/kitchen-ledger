@@ -37,9 +37,13 @@ def process_long_audio(self, job_id: str, file_url: str, tenant_id: str,
     logger.info("voice long_audio started: job_id=%s", job_id)
     db = SessionLocal()
     try:
-        job = db.query(AiJob).filter(AiJob.id == job_id).first()
+        from uuid import UUID
+        job = db.query(AiJob).filter(
+            AiJob.id == UUID(job_id),
+            AiJob.tenant_id == UUID(tenant_id),
+        ).first()
         if not job:
-            raise ValueError(f"Job {job_id} not found")
+            raise ValueError(f"Job {job_id} not found for tenant {tenant_id}")
         job.status = "processing"
         db.commit()
 
@@ -67,7 +71,9 @@ def process_long_audio(self, job_id: str, file_url: str, tenant_id: str,
         logger.exception("voice long_audio failed: job_id=%s", job_id)
         db.rollback()
         if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc, countdown=30)
+            # Exponential backoff: 30s, 60s, 120s (capped)
+            countdown = min(30 * (2 ** self.request.retries), 120)
+            raise self.retry(exc=exc, countdown=countdown)
         try:
             job = db.query(AiJob).filter(AiJob.id == job_id).first()
             if job:

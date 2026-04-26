@@ -29,12 +29,30 @@ export interface JWTPayload {
   jti: string;
 }
 
+// Identity headers that the gateway sets from verified JWT claims.
+// Must be stripped unconditionally from ALL incoming requests — including public
+// routes — to prevent clients from injecting arbitrary identities into upstream
+// services that trust these headers (header spoofing / tenant DoS).
+const GATEWAY_IDENTITY_HEADERS = [
+  'x-user-id',
+  'x-tenant-id',
+  'x-user-role',
+  'x-user-email',
+];
+
 export async function authMiddleware(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
   const path   = request.url.split('?')[0];
   const method = (request.method ?? 'GET').toUpperCase();
+
+  // Strip client-supplied identity headers before any routing decision.
+  // For authenticated routes they are re-added below from the verified JWT.
+  // For public routes they remain absent so upstream services cannot be spoofed.
+  for (const h of GATEWAY_IDENTITY_HEADERS) {
+    delete request.headers[h];
+  }
 
   const isPublic = PUBLIC_ROUTES.some(r =>
     typeof r === 'string'

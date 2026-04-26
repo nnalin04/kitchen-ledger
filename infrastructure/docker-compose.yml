@@ -5,19 +5,19 @@ version: "3.9"
 
 x-spring-env: &spring-env
   SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/kitchenledger
-  SPRING_DATASOURCE_USERNAME: kl_user
-  SPRING_DATASOURCE_PASSWORD: kl_password
+  SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-kl_user}
+  SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-kl_password}
   SPRING_DATA_REDIS_HOST: redis
   SPRING_DATA_REDIS_PORT: 6379
   RABBITMQ_HOST: rabbitmq
-  RABBITMQ_USERNAME: kl_rabbit
-  RABBITMQ_PASSWORD: kl_rabbit_pass
+  RABBITMQ_USERNAME: ${RABBITMQ_USER:-kl_rabbit}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-kl_rabbit_pass}
   RABBITMQ_PORT: 5672
 
 x-python-env: &python-env
-  DATABASE_URL: postgresql://kl_user:kl_password@postgres:5432/kitchenledger
+  DATABASE_URL: postgresql://${POSTGRES_USER:-kl_user}:${POSTGRES_PASSWORD:-kl_password}@postgres:5432/kitchenledger
   REDIS_URL: redis://redis:6379
-  RABBITMQ_URL: amqp://kl_rabbit:kl_rabbit_pass@rabbitmq:5672
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:-kl_rabbit}:${RABBITMQ_PASSWORD:-kl_rabbit_pass}@rabbitmq:5672
 
 services:
   # ─────────────────────────────────────────────
@@ -58,11 +58,11 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     ports:
-      - "5672:5672"     # AMQP
-      - "15672:15672"   # Management UI — http://localhost:15672 (kl_rabbit / kl_rabbit_pass)
+      - "5672:5672"                  # AMQP — accessible to services on Docker network
+      - "127.0.0.1:15672:15672"      # Management UI — localhost only (not exposed on network)
     environment:
-      RABBITMQ_DEFAULT_USER: kl_rabbit
-      RABBITMQ_DEFAULT_PASS: kl_rabbit_pass
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-kl_rabbit}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-kl_rabbit_pass}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -113,6 +113,7 @@ services:
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
       REDIS_URL: redis://redis:6379
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8081}
     depends_on:
       redis:
         condition: service_healthy
@@ -134,8 +135,8 @@ services:
     build:
       context: ../services/auth-service
       dockerfile: Dockerfile
-    ports:
-      - "8081:8081"
+    # No host port binding — reachable only via gateway on the Docker network.
+    # To debug directly: docker-compose exec auth-service or use `docker port`.
     environment:
       <<: *spring-env
       SERVER_PORT: 8081
@@ -167,8 +168,6 @@ services:
     build:
       context: ../services/inventory-service
       dockerfile: Dockerfile
-    ports:
-      - "8082:8082"
     environment:
       <<: *spring-env
       SERVER_PORT: 8082
@@ -197,8 +196,6 @@ services:
     build:
       context: ../services/finance-service
       dockerfile: Dockerfile
-    ports:
-      - "8083:8083"
     environment:
       <<: *spring-env
       SERVER_PORT: 8083
@@ -227,8 +224,6 @@ services:
     build:
       context: ../services/staff-service
       dockerfile: Dockerfile
-    ports:
-      - "8088:8088"
     environment:
       <<: *spring-env
       SERVER_PORT: 8088
@@ -257,8 +252,6 @@ services:
     build:
       context: ../services/ai-service
       dockerfile: Dockerfile
-    ports:
-      - "8084:8084"
     environment:
       <<: *python-env
       PORT: 8084
@@ -318,8 +311,6 @@ services:
     build:
       context: ../services/notification-service
       dockerfile: Dockerfile
-    ports:
-      - "8086:8086"
     environment:
       NODE_ENV: development
       PORT: 8086
@@ -349,8 +340,6 @@ services:
     build:
       context: ../services/report-service
       dockerfile: Dockerfile
-    ports:
-      - "8087:8087"
     environment:
       <<: *python-env
       PORT: 8087
@@ -382,8 +371,6 @@ services:
     build:
       context: ../services/file-service
       dockerfile: Dockerfile
-    ports:
-      - "8085:8085"
     environment:
       NODE_ENV: development
       PORT: 8085

@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { motion, AnimatePresence } from 'motion/react';
 import { financeApi } from '@/lib/api/finance.api';
 import { reportApi } from '@/lib/api/reports.api';
+import { RoleGuard } from '@/components/layout/RoleGuard';
 import {
   AreaChart,
   Area,
@@ -351,6 +352,7 @@ export default function ReportsPage() {
   }, [from, to]);
 
   return (
+    <RoleGuard allowedRoles={['owner']}>
     <motion.div
       className="space-y-6"
       initial={{ opacity: 0, y: 14 }}
@@ -641,5 +643,6 @@ export default function ReportsPage() {
         </div>
       </motion.div>
     </motion.div>
+    </RoleGuard>
   );
 }

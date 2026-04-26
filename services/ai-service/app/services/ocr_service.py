@@ -31,6 +31,9 @@ def preprocess_image(image_bytes: bytes) -> bytes:
     """
     from PIL import Image, ImageEnhance, ImageFilter
 
+    if not image_bytes:
+        raise ValueError("image_bytes cannot be empty")
+
     img = Image.open(io.BytesIO(image_bytes)).convert("L")  # grayscale
 
     img = ImageEnhance.Contrast(img).enhance(2.0)
@@ -126,7 +129,11 @@ def parse_with_gpt4o(
     )
 
     raw = response.choices[0].message.content or "{}"
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.warning("parse_with_gpt4o: JSON decode failed (%s), returning empty result", exc)
+        return {"items": [], "expenses": [], "confidence": 0.0, "unreadable_sections": []}
 
 
 # ── Catalog matching ───────────────────────────────────────────────────────
@@ -230,7 +237,11 @@ async def _fuzzy_match_batch(
     )
 
     raw = response.choices[0].message.content or "{}"
-    data = json.loads(raw)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.warning("_fuzzy_match_batch: JSON decode failed (%s), treating all as unmatched", exc)
+        data = {}
     results = data.get("matches", [])
 
     # Normalize output

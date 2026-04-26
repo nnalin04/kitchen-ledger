@@ -44,6 +44,10 @@ const HOP_BY_HOP_REQUEST = new Set([
   'proxy-authenticate',
   'upgrade',
   'host',
+  // Strip Authorization so downstream services cannot use it as a second
+  // identity source — they should only trust the gateway-injected X-User-Id /
+  // X-Tenant-Id headers that were set from the verified JWT.
+  'authorization',
 ]);
 
 const HOP_BY_HOP_RESPONSE = new Set([

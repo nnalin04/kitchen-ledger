@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -160,7 +161,13 @@ const styles = StyleSheet.create({
   statusEmoji: { fontSize: 48 },
   statusText: { fontSize: FontSize.xxl, fontWeight: '800', color: Colors.textPrimary },
   clockTime: { fontSize: FontSize.base, color: Colors.textSecondary },
-  elapsed: { fontSize: 40, fontWeight: '300', color: Colors.textPrimary, fontVariant: ['tabular-nums'] },
+  elapsed: {
+    fontSize: 40,
+    fontWeight: '300',
+    color: Colors.textPrimary,
+    fontFamily: Platform.OS === 'ios' ? undefined : 'monospace',
+    ...(Platform.OS === 'ios' ? { fontVariant: ['tabular-nums'] as any } : {}),
+  },
   role: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '500' },
   btn: {
     width: 200,

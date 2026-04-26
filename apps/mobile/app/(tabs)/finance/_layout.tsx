@@ -4,7 +4,7 @@ export default function FinanceLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
-      <Stack.Screen name="daily-report" />
+      <Stack.Screen name="daily-report" options={{ presentation: 'modal' }} />
       <Stack.Screen name="expense" />
     </Stack>
   );

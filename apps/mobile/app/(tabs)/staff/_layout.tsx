@@ -6,7 +6,7 @@ export default function StaffLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="clock" />
       <Stack.Screen name="schedule" />
-      <Stack.Screen name="tasks" />
+      <Stack.Screen name="tasks" options={{ presentation: 'modal' }} />
     </Stack>
   );
 }

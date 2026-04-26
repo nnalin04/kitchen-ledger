@@ -7,8 +7,8 @@ export default function InventoryLayout() {
       <Stack.Screen name="waste" />
       <Stack.Screen name="count" />
       <Stack.Screen name="count-session" />
-      <Stack.Screen name="receive" />
-      <Stack.Screen name="scan" />
+      <Stack.Screen name="receive" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="scan" options={{ presentation: 'fullScreenModal' }} />
     </Stack>
   );
 }

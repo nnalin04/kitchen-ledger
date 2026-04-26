@@ -192,6 +192,23 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    // Verify the storage_path belongs to this tenant — prevents a user from
+    // registering another tenant's storage objects in their own file records.
+    if (!body.storage_path.startsWith(`${req.tenantId}/`)) {
+      return reply.code(403).send({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'storage_path does not belong to your tenant' },
+      });
+    }
+
+    // Enforce the same MIME type allowlist as /upload and /presign.
+    if (!ALLOWED_MIME_TYPES.has(body.mime_type)) {
+      return reply.code(415).send({
+        success: false,
+        error: { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'File type not allowed' },
+      });
+    }
+
     // Generate a long-lived signed URL as the public_url
     const publicUrl = await createSignedUrl(body.storage_path, 60 * 60 * 24 * 365);
 
