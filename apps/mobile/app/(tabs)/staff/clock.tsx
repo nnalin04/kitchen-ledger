@@ -14,6 +14,7 @@ import * as Location from 'expo-location';
 import { apiClient } from '../../../lib/api/client';
 import { Colors, Spacing, FontSize, Radius } from '../../../constants/theme';
 import { format } from 'date-fns';
+import ShiftFeedbackModal from '../../../components/staff/ShiftFeedbackModal';
 
 interface ClockState {
   is_clocked_in: boolean;
@@ -28,6 +29,8 @@ export default function ClockScreen() {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [elapsed, setElapsed] = useState('0:00:00');
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [clockedOutShiftId, setClockedOutShiftId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     apiClient.get('/api/staff/attendance/status').then(({ data }) => {
@@ -83,9 +86,14 @@ export default function ClockScreen() {
         onPress: async () => {
           setWorking(true);
           try {
-            await apiClient.post('/api/staff/attendance/clock-out');
+            const { data } = await apiClient.post('/api/staff/attendance/clock-out');
+            // Capture the shift ID from the response before clearing state
+            const completedShiftId: string | undefined =
+              data?.shift_id ?? state?.shift_id ?? undefined;
             setState({ is_clocked_in: false });
-            router.back();
+            // Show feedback modal; navigation happens in onDismiss
+            setClockedOutShiftId(completedShiftId);
+            setShowFeedback(true);
           } catch (e: any) {
             Alert.alert('Error', e?.response?.data?.message ?? 'Could not clock out.');
           } finally {
@@ -94,6 +102,12 @@ export default function ClockScreen() {
         },
       },
     ]);
+  };
+
+  const handleFeedbackDismiss = () => {
+    setShowFeedback(false);
+    setClockedOutShiftId(undefined);
+    router.back();
   };
 
   if (loading) return <SafeAreaView style={styles.root}><ActivityIndicator style={{ flex: 1 }} color={Colors.primary} /></SafeAreaView>;
@@ -138,6 +152,12 @@ export default function ClockScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      <ShiftFeedbackModal
+        visible={showFeedback}
+        shiftId={clockedOutShiftId}
+        onDismiss={handleFeedbackDismiss}
+      />
     </SafeAreaView>
   );
 }
