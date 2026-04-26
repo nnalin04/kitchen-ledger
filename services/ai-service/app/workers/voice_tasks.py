@@ -75,7 +75,11 @@ def process_long_audio(self, job_id: str, file_url: str, tenant_id: str,
             countdown = min(30 * (2 ** self.request.retries), 120)
             raise self.retry(exc=exc, countdown=countdown)
         try:
-            job = db.query(AiJob).filter(AiJob.id == job_id).first()
+            # Must include tenant_id to maintain isolation in the error path.
+            job = db.query(AiJob).filter(
+                AiJob.id == UUID(job_id),
+                AiJob.tenant_id == UUID(tenant_id),
+            ).first()
             if job:
                 job.status = "failed"
                 job.error_message = str(exc)[:500]
