@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "KitchenLedger",
+    "slug": "kitchenledger",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "kitchenledger",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a2e"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.kitchenledger.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used to photograph receipts and waste items",
+        "NSMicrophoneUsageDescription": "Used for voice-to-text waste and stock count logging",
+        "NSLocationWhenInUseUsageDescription": "Used to verify clock-in location"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a1a2e"
+      },
+      "package": "com.kitchenledger.app",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        { "cameraPermission": "Used to photograph receipts and waste items" }
+      ],
+      [
+        "expo-location",
+        { "locationWhenInUsePermission": "Used to verify clock-in location" }
+      ],
+      [
+        "expo-av",
+        { "microphonePermission": "Used for voice-to-text logging" }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
