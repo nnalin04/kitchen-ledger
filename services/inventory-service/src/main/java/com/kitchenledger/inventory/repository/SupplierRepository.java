@@ -18,4 +18,6 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
     Page<Supplier> findByTenantIdAndDeletedAtIsNull(UUID tenantId, Pageable pageable);
 
     boolean existsByTenantIdAndNameIgnoreCaseAndDeletedAtIsNull(UUID tenantId, String name);
+
+    boolean existsByIdAndTenantIdAndDeletedAtIsNull(UUID id, UUID tenantId);
 }

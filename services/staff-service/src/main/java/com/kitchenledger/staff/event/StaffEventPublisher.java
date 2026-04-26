@@ -188,6 +188,31 @@ public class StaffEventPublisher {
         ));
     }
 
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public void publishSchedulePublished(UUID tenantId, LocalDate from, LocalDate to, int shiftCount) {
+        Map<String, Object> payload = Map.of(
+                "from",        from.toString(),
+                "to",          to.toString(),
+                "shift_count", String.valueOf(shiftCount)
+        );
+        publishEnvelope(tenantId, "staff.schedule.published", payload);
+    }
+
+    @Recover
+    public void recoverPublishSchedulePublished(AmqpException ex, UUID tenantId,
+                                                 LocalDate from, LocalDate to, int shiftCount) {
+        log.error("CRITICAL: Event publish failed after 3 retries for key staff.schedule.published. Saving to outbox.", ex);
+        saveToOutbox(tenantId, "staff.schedule.published", Map.of(
+                "from",        from.toString(),
+                "to",          to.toString(),
+                "shift_count", String.valueOf(shiftCount)
+        ));
+    }
+
     private void publishEnvelope(UUID tenantId, String eventType, Map<String, Object> payload) {
         EventEnvelope envelope = EventEnvelope.builder()
                 .eventId(UUID.randomUUID().toString())

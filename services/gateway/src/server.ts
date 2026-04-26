@@ -64,46 +64,51 @@ async function bootstrap(): Promise<void> {
     },
   });
 
-  // Stricter IP-based rate limits for sensitive auth endpoints.
-  // These run BEFORE the global rate limit check and return 429 early
-  // so brute-force attacks are throttled more aggressively.
-  const authRateLimits: Record<string, number> = {
-    '/api/auth/login':           10,
-    '/api/auth/register':         5,
-    '/api/auth/forgot-password':  3,
-  };
+  // Per-route rate limits from TRD §2.4.
+  // Runs BEFORE the global limit; return 429 immediately on breach.
+  // Window in seconds, max requests per window.
+  const ROUTE_LIMITS: Array<{ path: string; max: number; windowSecs: number; methods?: string[] }> = [
+    { path: '/api/auth/login',           max: 10,  windowSecs: 15 * 60, methods: ['POST'] },
+    { path: '/api/auth/register',        max: 5,   windowSecs: 60 * 60, methods: ['POST'] },
+    { path: '/api/auth/refresh',         max: 30,  windowSecs: 15 * 60, methods: ['POST'] },
+    { path: '/api/auth/forgot-password', max: 3,   windowSecs: 15 * 60, methods: ['POST'] },
+    { path: '/api/ai/ocr',               max: 20,  windowSecs: 60 * 60 },
+    { path: '/api/ai/voice',             max: 60,  windowSecs: 60 * 60 },
+    { path: '/api/ai/query',             max: 100, windowSecs: 60 * 60 },
+  ];
 
-  // ── Correlation ID propagation (M-8) ─────────────────────────────────────
-  // Generate a unique correlation ID for every inbound request (or reuse if
-  // the client already sent one).  Echoed back in the response and forwarded
-  // to all upstream services via the x-correlation-id header so log entries
-  // across services can be correlated by this single identifier.
+  // ── Correlation ID propagation ────────────────────────────────────────────
   app.addHook('onRequest', async (req, reply) => {
     const correlationId =
       (req.headers['x-correlation-id'] as string | undefined) ||
       `kl-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    // Mutate the inbound headers so the proxy picks it up when forwarding
     (req.headers as Record<string, string>)['x-correlation-id'] = correlationId;
     reply.header('x-correlation-id', correlationId);
   });
 
+  // ── Per-route rate limit enforcement ─────────────────────────────────────
   app.addHook('onRequest', async (req, reply) => {
-    if (req.method !== 'POST') return;
-    const limit = authRateLimits[req.url?.split('?')[0] ?? ''];
-    if (limit == null) return;
+    const path = req.url?.split('?')[0] ?? '';
+    const method = req.method?.toUpperCase() ?? 'GET';
 
-    const key = `rl:auth:${req.url.split('?')[0].replaceAll('/', ':')}:${req.ip}`;
-    const count = await redisClient.incr(key);
-    if (count === 1) await redisClient.expire(key, 60);
+    for (const rule of ROUTE_LIMITS) {
+      if (!path.startsWith(rule.path)) continue;
+      if (rule.methods && !rule.methods.includes(method)) continue;
 
-    if (count > limit) {
-      return reply.code(429).send({
-        success: false,
-        error: {
-          code: 'TOO_MANY_REQUESTS',
-          message: 'Too many authentication attempts. Please wait 1 minute.',
-        },
-      });
+      const key = `rl:${rule.path.replaceAll('/', ':')}:${req.ip}`;
+      const count = await redisClient.incr(key);
+      if (count === 1) await redisClient.expire(key, rule.windowSecs);
+
+      if (count > rule.max) {
+        return reply.code(429).send({
+          success: false,
+          error: {
+            code: 'TOO_MANY_REQUESTS',
+            message: `Rate limit exceeded. Try again in ${rule.windowSecs / 60} minute(s).`,
+          },
+        });
+      }
+      break; // first matching rule wins
     }
   });
 
@@ -116,9 +121,13 @@ async function bootstrap(): Promise<void> {
         error: { code: 'RATE_LIMITED', message: 'Too many requests' },
       });
     }
-    return reply.code(error.statusCode ?? 500).send({
+    const isAppError = typeof (error as any).statusCode === 'number' && (error as any).statusCode < 500;
+    return reply.code((error as any).statusCode ?? 500).send({
       success: false,
-      error: { code: 'GATEWAY_ERROR', message: error.message },
+      error: {
+        code: (error as any).code ?? 'INTERNAL_ERROR',
+        message: isAppError ? error.message : 'An unexpected error occurred',
+      },
     });
   });
 

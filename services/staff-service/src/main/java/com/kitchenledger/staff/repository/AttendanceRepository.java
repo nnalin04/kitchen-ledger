@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,6 +31,22 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
 
     /** Used by no-show detection job: check if any attendance record is linked to a specific shift. */
     boolean existsByShiftIdAndTenantId(UUID shiftId, UUID tenantId);
+
+    /**
+     * Find all attendance records for a tenant on a specific calendar date (UTC day boundaries).
+     * Used by tip-pool BY_HOURS distribution to determine hours worked per employee.
+     */
+    @Query("""
+        SELECT a FROM Attendance a
+        WHERE a.tenantId = :tenantId
+          AND a.clockInAt >= :dayStart
+          AND a.clockInAt < :dayEnd
+          AND a.hoursWorked IS NOT NULL
+        """)
+    List<Attendance> findByTenantIdAndDate(
+            @Param("tenantId") UUID tenantId,
+            @Param("dayStart") Instant dayStart,
+            @Param("dayEnd")   Instant dayEnd);
 
     @Query("""
         SELECT COALESCE(SUM(a.hoursWorked), 0)

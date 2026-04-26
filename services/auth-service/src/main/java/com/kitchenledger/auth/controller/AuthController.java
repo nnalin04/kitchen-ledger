@@ -73,8 +73,12 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Map<String, Object>> logout(
-            @Valid @RequestBody LogoutRequest req) {
-        authService.logout(req);
+            @Valid @RequestBody LogoutRequest req,
+            HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        String accessToken = (authHeader != null && authHeader.startsWith("Bearer "))
+                ? authHeader.substring(7) : null;
+        authService.logout(req, accessToken);
         return ResponseEntity.ok(Map.of("success", true));
     }
 
@@ -108,9 +112,7 @@ public class AuthController {
     private UUID extractUserId(HttpServletRequest request) {
         Object attr = request.getAttribute("kl.userId");
         if (attr == null) {
-            String header = request.getHeader("x-user-id");
-            if (header == null) throw new RuntimeException("Missing user context");
-            return UUID.fromString(header);
+            throw new com.kitchenledger.auth.exception.AccessDeniedException("Missing user context");
         }
         return UUID.fromString(attr.toString());
     }
@@ -118,9 +120,7 @@ public class AuthController {
     private UUID extractTenantId(HttpServletRequest request) {
         Object attr = request.getAttribute("kl.tenantId");
         if (attr == null) {
-            String header = request.getHeader("x-tenant-id");
-            if (header == null) throw new RuntimeException("Missing tenant context");
-            return UUID.fromString(header);
+            throw new com.kitchenledger.auth.exception.AccessDeniedException("Missing tenant context");
         }
         return UUID.fromString(attr.toString());
     }

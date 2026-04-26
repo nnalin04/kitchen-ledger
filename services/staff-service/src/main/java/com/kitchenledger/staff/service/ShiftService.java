@@ -16,7 +16,9 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +41,19 @@ public class ShiftService {
     public List<Shift> listByDateRange(UUID tenantId, LocalDate from, LocalDate to) {
         return shiftRepository.findByTenantIdAndShiftDateBetweenOrderByShiftDateAscStartTimeAsc(
                 tenantId, from, to);
+    }
+
+    /**
+     * Returns all shifts for the 7-day week starting at {@code weekStart}, grouped by employeeId.
+     * Results within each employee's list are ordered by shiftDate then startTime.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, List<Shift>> getWeeklySchedule(UUID tenantId, LocalDate weekStart) {
+        LocalDate weekEnd = weekStart.plusDays(6);
+        List<Shift> shifts = shiftRepository
+                .findByTenantIdAndShiftDateBetweenOrderByShiftDateAscStartTimeAsc(tenantId, weekStart, weekEnd);
+        return shifts.stream()
+                .collect(Collectors.groupingBy(Shift::getEmployeeId));
     }
 
     @Transactional(readOnly = true)
@@ -121,6 +136,9 @@ public class ShiftService {
                 shiftRepository.save(s);
                 count++;
             }
+        }
+        if (count > 0) {
+            eventPublisher.publishSchedulePublished(tenantId, from, to, count);
         }
         return count;
     }

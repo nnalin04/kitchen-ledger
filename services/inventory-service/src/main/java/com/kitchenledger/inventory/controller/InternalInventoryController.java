@@ -201,6 +201,44 @@ public class InternalInventoryController {
         return ResponseEntity.ok(rows);
     }
 
+    /**
+     * Batch lookup by name array — for AI Service OCR catalog matching.
+     * Names are matched case-insensitively.
+     */
+    @GetMapping("/items/by-names")
+    public ResponseEntity<List<InventoryItemResponse>> getByNames(
+            @RequestHeader("x-internal-secret") String secret,
+            @RequestParam UUID tenantId,
+            @RequestParam(name = "names") List<String> names) {
+        verifySecret(secret);
+        List<String> lowerNames = names.stream()
+                .map(String::toLowerCase)
+                .toList();
+        List<InventoryItemResponse> items = itemRepository
+                .findByTenantIdAndNameInIgnoreCaseAndDeletedAtIsNull(tenantId, lowerNames)
+                .stream().map(InventoryItemResponse::from).toList();
+        return ResponseEntity.ok(items);
+    }
+
+    /**
+     * Cost endpoint for Finance Service — returns avg_cost and count_unit for a single item.
+     */
+    @GetMapping("/items/{id}/cost")
+    public ResponseEntity<Map<String, Object>> getItemCost(
+            @RequestHeader("x-internal-secret") String secret,
+            @PathVariable UUID id,
+            @RequestParam UUID tenantId) {
+        verifySecret(secret);
+        return itemRepository.findByIdAndTenantIdAndDeletedAtIsNull(id, tenantId)
+                .map(item -> ResponseEntity.ok(Map.<String, Object>of(
+                        "id",         item.getId(),
+                        "name",       item.getName(),
+                        "avg_cost",   item.getAvgCost() != null ? item.getAvgCost() : BigDecimal.ZERO,
+                        "count_unit", item.getCountUnit() != null ? item.getCountUnit() : ""
+                )))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     private void verifySecret(String provided) {
         if (provided == null || !MessageDigest.isEqual(
                 internalSecret.getBytes(StandardCharsets.UTF_8),

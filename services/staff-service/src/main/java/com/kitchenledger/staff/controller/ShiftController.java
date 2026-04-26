@@ -4,6 +4,7 @@ import com.kitchenledger.staff.dto.request.CreateShiftRequest;
 import com.kitchenledger.staff.dto.response.ShiftResponse;
 import com.kitchenledger.staff.exception.AccessDeniedException;
 import com.kitchenledger.staff.model.Employee;
+import com.kitchenledger.staff.model.Shift;
 import com.kitchenledger.staff.model.enums.ShiftStatus;
 import com.kitchenledger.staff.security.GatewayTrustFilter;
 import com.kitchenledger.staff.security.RequiresRole;
@@ -21,6 +22,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/staff/shifts")
@@ -63,6 +65,19 @@ public class ShiftController {
                     .stream().map(ShiftResponse::from).toList();
         }
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/schedule")
+    public ResponseEntity<Map<String, Object>> getWeeklySchedule(
+            HttpServletRequest req,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekStart) {
+        UUID tenantId = tenantId(req);
+        Map<UUID, List<Shift>> grouped = shiftService.getWeeklySchedule(tenantId, weekStart);
+        Map<String, List<ShiftResponse>> responseMap = grouped.entrySet().stream()
+                .collect(Collectors.toMap(
+                        e -> e.getKey().toString(),
+                        e -> e.getValue().stream().map(ShiftResponse::from).toList()));
+        return ResponseEntity.ok(Map.of("success", true, "data", responseMap));
     }
 
     @PostMapping("/publish")

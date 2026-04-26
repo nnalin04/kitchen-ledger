@@ -79,6 +79,66 @@ export function passwordResetEmail(params: {
   };
 }
 
+export function paymentOverdueEmail(params: {
+  vendorName: string;
+  amount: string;
+  currency: string;
+  dueDate: string;
+  appUrl: string;
+}): EmailPayload {
+  return {
+    to: '',
+    subject: `Payment overdue — ${params.vendorName}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h2 style="color:#dc2626">Payment Overdue</h2>
+        <p>A payment to <strong>${params.vendorName}</strong> is past due.</p>
+        <table style="width:100%;border-collapse:collapse;margin:16px 0">
+          <tr><td style="padding:8px 0;color:#6b7280">Vendor</td><td style="padding:8px 0;font-weight:600">${params.vendorName}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280">Amount</td><td style="padding:8px 0;font-weight:600;color:#dc2626">${params.currency}${params.amount}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280">Due Date</td><td style="padding:8px 0">${params.dueDate}</td></tr>
+        </table>
+        <a href="${params.appUrl}/finance/accounts-payable"
+           style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;
+                  border-radius:6px;text-decoration:none;margin-top:8px">
+          View & Pay Now
+        </a>
+        <p style="color:#6b7280;font-size:13px;margin-top:32px">
+          KitchenLedger · The all-in-one platform for independent restaurants
+        </p>
+      </div>
+    `,
+  };
+}
+
+export function reportReadyEmail(params: {
+  reportName: string;
+  downloadUrl: string;
+  expiresAt: string;
+}): EmailPayload {
+  return {
+    to: '',
+    subject: `Your ${params.reportName} is ready`,
+    html: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+        <h2>Your report is ready</h2>
+        <p><strong>${params.reportName}</strong> has been generated and is ready to download.</p>
+        <a href="${params.downloadUrl}"
+           style="display:inline-block;background:#2563eb;color:#fff;padding:12px 24px;
+                  border-radius:6px;text-decoration:none;margin-top:16px">
+          Download Report
+        </a>
+        <p style="color:#6b7280;font-size:13px;margin-top:12px">
+          This download link expires on ${params.expiresAt}.
+        </p>
+        <p style="color:#6b7280;font-size:13px;margin-top:32px">
+          KitchenLedger · The all-in-one platform for independent restaurants
+        </p>
+      </div>
+    `,
+  };
+}
+
 export function invitationEmail(params: {
   fullName: string;
   restaurantName: string;

@@ -1,5 +1,9 @@
 server:
   port: ${SERVER_PORT:8081}
+  error:
+    include-stacktrace: never
+    include-message: always
+    include-binding-errors: never
 
 spring:
   application:
@@ -61,7 +65,7 @@ management:
         include: health,info,metrics,readiness
   endpoint:
     health:
-      show-details: always
+      show-details: when_authorized
       group:
         readiness:
           include: readinessState,db

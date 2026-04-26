@@ -20,6 +20,7 @@ export function registerRequestLogger(app: FastifyInstance): void {
   // Structured access log after each response is sent
   app.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId  = request.headers['x-tenant-id']  ?? 'anon';
+    const userId    = request.headers['x-user-id']    ?? 'anon';
     const requestId = request.headers['x-request-id'] ?? '-';
     const durationMs = Math.round(reply.elapsedTime);
 
@@ -30,6 +31,7 @@ export function registerRequestLogger(app: FastifyInstance): void {
     request.log[level]({
       requestId,
       tenantId,
+      userId,
       method: request.method,
       path: request.routerPath ?? request.url.split('?')[0],
       status: reply.statusCode,

@@ -50,3 +50,30 @@ export async function deleteFromStorage(storagePath: string): Promise<void> {
   const { error } = await storageClient().storage.from(BUCKET).remove([storagePath]);
   if (error) throw new Error(`Storage delete failed: ${error.message}`);
 }
+
+/**
+ * Create a signed URL that allows a client to upload directly to Supabase Storage.
+ * Returns { signedUrl, token } — client POSTs the file to signedUrl.
+ */
+export async function createSignedUploadUrl(
+  storagePath: string,
+): Promise<{ signedUrl: string; token: string }> {
+  const { data, error } = await storageClient()
+    .storage.from(BUCKET)
+    .createSignedUploadUrl(storagePath);
+  if (error || !data) throw new Error(`Failed to create signed upload URL: ${error?.message}`);
+  return { signedUrl: data.signedUrl, token: data.token };
+}
+
+/**
+ * Check if a file exists in storage (HEAD request equivalent).
+ * Returns true if the file exists.
+ */
+export async function fileExists(storagePath: string): Promise<boolean> {
+  const { data, error } = await storageClient()
+    .storage.from(BUCKET)
+    .list(storagePath.split('/').slice(0, -1).join('/'), {
+      search: storagePath.split('/').pop(),
+    });
+  return !error && (data?.length ?? 0) > 0;
+}

@@ -139,7 +139,7 @@ public class InternalAuthController {
     }
 
     private void checkInternalSecret(HttpServletRequest request) {
-        String secret = request.getHeader("X-Internal-Service-Secret");
+        String secret = request.getHeader("x-internal-secret");
         if (internalServiceSecret == null || internalServiceSecret.isBlank()) {
             throw new IllegalStateException("INTERNAL_SERVICE_SECRET is not configured");
         }

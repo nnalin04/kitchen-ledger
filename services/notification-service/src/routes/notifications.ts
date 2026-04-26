@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { pool } from '../db';
+import { config } from '../config';
+import { sendPush } from '../providers/expo-push.provider';
 
 export async function registerNotificationRoutes(app: FastifyInstance): Promise<void> {
 
@@ -141,6 +143,52 @@ export async function registerNotificationRoutes(app: FastifyInstance): Promise<
     );
 
     return reply.send({ success: true });
+  });
+}
+
+  // ── Internal: direct send (service-to-service) ───────────────────────
+  // Protected by INTERNAL_SERVICE_SECRET header, not gateway JWT.
+
+  const internalSendSchema = z.object({
+    user_id:   z.string().uuid(),
+    title:     z.string().min(1),
+    body:      z.string().min(1),
+    priority:  z.enum(['critical', 'important', 'informational']).default('informational'),
+    channels:  z.array(z.enum(['push', 'email'])).default(['push']),
+    data:      z.record(z.unknown()).optional(),
+    tenant_id: z.string().uuid(),
+  });
+
+  app.post('/internal/notifications/send', async (req, reply) => {
+    const secret = req.headers['x-internal-secret'] as string;
+    if (!secret || secret !== config.INTERNAL_SERVICE_SECRET) {
+      return reply.code(401).send({ success: false, error: { code: 'UNAUTHORIZED' } });
+    }
+
+    const parsed = internalSendSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: parsed.error.message },
+      });
+    }
+
+    const { user_id, title, body, priority, channels, data, tenant_id } = parsed.data;
+
+    // Persist to DB
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO notifications (tenant_id, user_id, type, priority, title, body, data, channels)
+       VALUES ($1, $2, 'direct', $3, $4, $5, $6, $7)
+       RETURNING id`,
+      [tenant_id, user_id, priority, title, body, JSON.stringify(data ?? {}), JSON.stringify(channels)]
+    );
+
+    // Dispatch push
+    if (channels.includes('push')) {
+      await sendPush({ userId: user_id, title, body, data, priority });
+    }
+
+    return reply.code(201).send({ success: true, data: { id: row.id } });
   });
 }
 

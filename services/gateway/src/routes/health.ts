@@ -75,4 +75,28 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
       infrastructure: { redis: redisStatus },
     });
   });
+
+  // Expanded per-service health details (same data, explicit endpoint for monitoring tooling)
+  app.get('/health/services', async (_req, reply) => {
+    const [auth, inventory, finance, staff, ai, file, notification, report] =
+      await Promise.all([
+        pingService(config.AUTH_SERVICE_URL, 'auth'),
+        pingService(config.INVENTORY_SERVICE_URL, 'inventory'),
+        pingService(config.FINANCE_SERVICE_URL, 'finance'),
+        pingService(config.STAFF_SERVICE_URL, 'staff'),
+        pingService(config.AI_SERVICE_URL, 'ai'),
+        pingService(config.FILE_SERVICE_URL, 'file'),
+        pingService(config.NOTIFICATION_SERVICE_URL, 'notification'),
+        pingService(config.REPORT_SERVICE_URL, 'report'),
+      ]);
+
+    const services = { auth, inventory, finance, staff, ai, file, notification, report };
+    const allOk = Object.values(services).every(s => s.status === 'ok');
+
+    return reply.code(allOk ? 200 : 503).send({
+      status: allOk ? 'ok' : 'degraded',
+      timestamp: new Date().toISOString(),
+      services,
+    });
+  });
 }

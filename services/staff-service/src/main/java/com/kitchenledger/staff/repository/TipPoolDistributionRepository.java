@@ -10,4 +10,6 @@ import java.util.UUID;
 @Repository
 public interface TipPoolDistributionRepository extends JpaRepository<TipPoolDistribution, UUID> {
     List<TipPoolDistribution> findByTipPoolIdAndTenantId(UUID tipPoolId, UUID tenantId);
+
+    void deleteByTipPoolId(UUID tipPoolId);
 }

@@ -1,9 +1,17 @@
 import { config } from '../config';
 
 const INTERNAL_HEADERS = {
-  'X-Internal-Service-Secret': config.INTERNAL_SERVICE_SECRET,
+  'x-internal-secret': config.INTERNAL_SERVICE_SECRET,
   'Content-Type': 'application/json',
 };
+
+const FETCH_TIMEOUT_MS = 5000;
+
+function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
 
 /**
  * Resolves active users for a tenant filtered by role(s).
@@ -15,7 +23,7 @@ export async function getUsersByRole(
 ): Promise<Array<{ id: string; email: string; role: string }>> {
   try {
     const params = new URLSearchParams({ tenantId, roles: roles.join(',') });
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${config.AUTH_SERVICE_URL}/internal/auth/users?${params}`,
       { headers: INTERNAL_HEADERS }
     );
@@ -35,13 +43,9 @@ export async function getUserById(
   userId: string
 ): Promise<{ id: string; email: string; fullName: string } | null> {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${config.AUTH_SERVICE_URL}/internal/auth/users/${userId}`,
-      {
-        headers: {
-          'X-Internal-Service-Secret': config.INTERNAL_SERVICE_SECRET,
-        },
-      }
+      { headers: INTERNAL_HEADERS }
     );
     if (!res.ok) return null;
     const body = await res.json() as { success: boolean; data: { id: string; email: string; fullName: string } };
@@ -59,7 +63,7 @@ export async function getUserById(
  */
 export async function getInviteLink(userId: string): Promise<string | null> {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${config.AUTH_SERVICE_URL}/internal/auth/invites/${userId}/link`,
       { headers: INTERNAL_HEADERS }
     );

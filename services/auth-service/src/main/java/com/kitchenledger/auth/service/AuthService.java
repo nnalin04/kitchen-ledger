@@ -222,16 +222,35 @@ public class AuthService {
     }
 
     /**
-     * Logout: revoke the refresh token.
-     * Note: access token revocation via Redis JTI is a Phase 2 enhancement.
+     * Logout: revoke the refresh token and write the access token JTI to Redis
+     * so the gateway rejects it immediately (before its natural expiry).
      */
     @Transactional
-    public void logout(LogoutRequest req) {
+    public void logout(LogoutRequest req, String accessToken) {
         String hash = sha256Hex(req.getRefreshToken());
         refreshTokenRepository.findByTokenHash(hash).ifPresent(rt -> {
             rt.setRevokedAt(Instant.now());
             refreshTokenRepository.save(rt);
         });
+
+        // Revoke access token JTI in Redis if token was provided
+        if (accessToken != null && !accessToken.isBlank()) {
+            try {
+                io.jsonwebtoken.Claims claims = jwtService.validateToken(accessToken);
+                String jti = claims.getId();
+                if (jti != null && !jti.isBlank()) {
+                    redis.opsForValue().set(
+                        "revoked:" + jti,
+                        "1",
+                        accessTokenExpiryMinutes,
+                        TimeUnit.MINUTES
+                    );
+                }
+            } catch (io.jsonwebtoken.JwtException e) {
+                // Token already invalid — nothing to revoke
+                log.debug("logout: could not parse access token for JTI revocation: {}", e.getMessage());
+            }
+        }
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.kitchenledger.inventory.controller;
 
 import com.kitchenledger.inventory.dto.request.CreateInventoryItemRequest;
+import com.kitchenledger.inventory.dto.response.BulkImportResult;
 import com.kitchenledger.inventory.dto.response.InventoryItemResponse;
 import com.kitchenledger.inventory.security.GatewayTrustFilter;
 import com.kitchenledger.inventory.security.RequiresRole;
@@ -14,6 +15,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -47,6 +49,40 @@ public class InventoryItemController {
         List<InventoryItemResponse> items = itemService.getBelowPar(tenantId)
                 .stream().map(InventoryItemResponse::from).toList();
         return ResponseEntity.ok(items);
+    }
+
+    /**
+     * GET /api/v1/inventory/items/alerts
+     * Returns low-stock items (below PAR) and perishable items expiring soon.
+     * Declared before /{id} to avoid Spring MVC route shadowing.
+     */
+    @GetMapping("/alerts")
+    public ResponseEntity<Map<String, Object>> getAlerts(HttpServletRequest req) {
+        UUID tenantId = tenantId(req);
+        List<InventoryItemResponse> lowStock = itemService.getBelowPar(tenantId)
+                .stream().map(InventoryItemResponse::from).toList();
+        List<InventoryItemResponse> expiring = itemService.getExpiringSoon(tenantId)
+                .stream().map(InventoryItemResponse::from).toList();
+        return ResponseEntity.ok(Map.of(
+                "low_stock", lowStock,
+                "expiring",  expiring
+        ));
+    }
+
+    /**
+     * POST /api/v1/inventory/items/import
+     * Bulk import items from CSV file.
+     */
+    @PostMapping("/import")
+    @RequiresRole({"owner", "manager"})
+    public ResponseEntity<Map<String, Object>> bulkImport(
+            HttpServletRequest req,
+            @RequestParam("file") MultipartFile file) {
+        UUID tenantId = tenantId(req);
+        UUID userId   = userId(req);
+        BulkImportResult result = itemService.bulkImport(tenantId, userId, file);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("success", true, "data", result));
     }
 
     @GetMapping("/{id}")
