@@ -95,16 +95,27 @@ class TestInventoryVarianceContract:
 
 
 class TestPnlAndWasteContracts:
-    def test_pnl_passes_through_dsr_rows(self):
-        """P&L report passes DSR rows through unchanged."""
+    def test_pnl_fetches_from_pl_data_endpoint(self):
+        """P&L report fetches from /internal/finance/pl-data and wraps the result in a list."""
         from app.workers.tasks import _fetch_data
 
-        dsr_rows = [{"report_date": "2026-04-20", "net_sales": 50000, "total_expenses": 20000}]
+        pl_payload = {
+            "netSales": 50000,
+            "totalCogs": 15000,
+            "totalLabor": 12000,
+            "grossProfit": 35000,
+            "netProfit": 23000,
+        }
+        mock_response = MagicMock()
+        mock_response.json.return_value = pl_payload
+        mock_response.raise_for_status.return_value = None
 
-        with patch("app.workers.tasks._safe_list_get", return_value=dsr_rows):
-            rows = _fetch_data("pnl", {}, "tenant-1")
+        with patch("app.workers.tasks.httpx.get", return_value=mock_response):
+            rows = _fetch_data("pnl", {"from": "2026-04-01", "to": "2026-04-30"}, "tenant-1")
 
-        assert rows == dsr_rows
+        assert len(rows) == 1
+        assert rows[0]["netSales"] == 50000
+        assert rows[0]["netProfit"] == 23000
 
     def test_waste_passes_through_waste_rows(self):
         """Waste report passes inventory waste rows through unchanged."""

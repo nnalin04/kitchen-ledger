@@ -105,12 +105,20 @@ def _set_status(
 
 
 def _safe_list_get(url: str, query: dict | None = None) -> list[dict]:
-    """GET an internal endpoint and return the response as a list; returns [] on any error."""
+    """GET an internal endpoint and return the response as a list; raises on upstream errors."""
     try:
-        data = httpx.get(url, params=query, headers=_INTERNAL_HEADERS, timeout=30).json()
-        return data if isinstance(data, list) else []
-    except Exception:
-        return []
+        resp = httpx.get(url, params=query, headers=_INTERNAL_HEADERS, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, list):
+            raise ValueError(f"Expected list from {url}, got {type(data).__name__}")
+        return data
+    except httpx.HTTPStatusError as e:
+        logger.error("Upstream %s returned %d: %s", url, e.response.status_code, e.response.text[:200])
+        raise
+    except Exception as e:
+        logger.error("Failed to fetch %s: %s", url, e)
+        raise
 
 
 def _fetch_data(report_type: str, params: dict, tenant_id: str) -> list:
@@ -121,8 +129,16 @@ def _fetch_data(report_type: str, params: dict, tenant_id: str) -> list:
     two = Decimal("0.01")
 
     if report_type == "pnl":
-        dsr = _safe_list_get(f"{settings.finance_service_url}/internal/finance/dsr", common)
-        return dsr if isinstance(dsr, list) else []
+        url = f"{settings.finance_service_url}/internal/finance/pl-data"
+        try:
+            r = httpx.get(url, params={"tenantId": tenant_id, "start": from_date, "end": to_date},
+                          headers=_INTERNAL_HEADERS, timeout=30)
+            r.raise_for_status()
+            data = r.json()
+            return [data.get("data", data)]  # return as list for consistent interface
+        except Exception as e:
+            logger.warning("Failed to fetch PL data: %s", e)
+            return []
 
     if report_type == "waste":
         data = _safe_list_get(f"{settings.inventory_service_url}/internal/inventory/waste", common)
@@ -232,6 +248,9 @@ def _fetch_data(report_type: str, params: dict, tenant_id: str) -> list:
 
 def _generate_pdf(report_type: str, report_name: str, data: list, params: dict) -> bytes:
     """Generate a simple PDF report with reportlab and return as bytes."""
+    if report_type == "pnl" and data:
+        from app.generators.pl_generator import generate as gen_pl
+        return gen_pl(data[0], params.get("from", ""), params.get("to", ""))
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     width, height = A4
@@ -248,7 +267,9 @@ def _generate_pdf(report_type: str, report_name: str, data: list, params: dict) 
     # Body — simple row listing
     y = height - 130
     c.setFont("Helvetica", 10)
-    for row in data[:50]:  # cap at 50 rows to avoid overflow
+    if len(data) > 500:
+        logger.warning("Report job truncated: %d rows received, rendering first 500", len(data))
+    for row in data[:500]:
         text = " | ".join(f"{k}: {v}" for k, v in list(row.items())[:4])
         c.drawString(50, y, text[:120])
         y -= 15

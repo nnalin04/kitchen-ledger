@@ -14,13 +14,14 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.http_client import get_json
-from app.main import ServiceException
+from app.core.exceptions import ServiceException
 from app.schemas.reports import (
     ExpenseCategoryBreakdown,
     ExpenseReport,
@@ -537,6 +538,52 @@ async def list_report_jobs(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/jobs/{job_id}/download")
+async def download_report_job(
+    job_id: str,
+    tenant_id: str = Header(..., alias="x-tenant-id"),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """
+    Download a completed report.
+    - If the job is completed: HTTP 302 redirect to a fresh 1-hour signed URL.
+    - If the job is still processing/queued/pending: HTTP 202 (not ready yet).
+    - If the job is not found: HTTP 404.
+    """
+    result = await db.execute(
+        text("""
+            SELECT id, status, output_url, error_message
+            FROM report_jobs
+            WHERE id = :id
+              AND tenant_id = :tenant_id
+        """),
+        {"id": job_id, "tenant_id": tenant_id},
+    )
+    job = result.fetchone()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.status != "completed":
+        return Response(
+            content=__import__("json").dumps({"status": job.status, "message": "Report not ready yet"}),
+            status_code=202,
+            media_type="application/json",
+        )
+
+    # Job is completed — generate a short-lived (1h) signed URL
+    from app.storage.supabase import get_signed_url
+
+    signed_url = get_signed_url(job_id, tenant_id)
+    if not signed_url:
+        # Fall back to the stored output_url which may be a longer-lived URL
+        signed_url = job.output_url or ""
+
+    if not signed_url:
+        raise HTTPException(status_code=500, detail="Report file URL unavailable")
+
+    return RedirectResponse(url=signed_url, status_code=302)
 
 
 def _json_str(data: dict) -> str:

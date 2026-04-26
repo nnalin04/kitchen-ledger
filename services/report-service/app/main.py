@@ -1,36 +1,39 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import logging
 
 from app.core.config import settings
+from app.core.exceptions import (  # noqa: E402 — must be before router import
+    ServiceException,
+    NotFoundException,
+    AccessDeniedException,
+)
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start background consumers on startup; clean up on shutdown."""
+    try:
+        from app.consumers.dsr_reconciled import start_consumer_thread
+        start_consumer_thread()
+        logger.info("lifespan: dsr_reconciled consumer thread started")
+    except Exception as exc:
+        # Consumer failure must not block the API from starting
+        logger.warning("lifespan: could not start dsr_reconciled consumer: %s", exc)
+    yield
+    # Shutdown: daemon thread exits automatically with the process
+
 
 app = FastAPI(
     title="KitchenLedger Report Service",
     version="0.1.0",
-    docs_url="/docs",
-    redoc_url=None,
+    docs_url="/docs" if getattr(settings, 'debug', False) else None,
+    redoc_url="/redoc" if getattr(settings, 'debug', False) else None,
+    lifespan=lifespan,
 )
-
-
-# ── Exception hierarchy ────────────────────────────────────────────────────
-
-class ServiceException(Exception):
-    def __init__(self, code: str, message: str, status: int = 400):
-        self.code = code
-        self.message = message
-        self.status = status
-
-
-class NotFoundException(ServiceException):
-    def __init__(self, message: str):
-        super().__init__("NOT_FOUND", message, 404)
-
-
-class AccessDeniedException(ServiceException):
-    def __init__(self, message: str):
-        super().__init__("FORBIDDEN", message, 403)
 
 
 # ── Exception handlers ─────────────────────────────────────────────────────

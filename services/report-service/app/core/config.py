@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # Server
     port: int = 8087
+    debug: bool = False
 
     # Database
     database_url: str
