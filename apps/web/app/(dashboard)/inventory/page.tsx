@@ -1,23 +1,19 @@
 'use client';
 import { useState } from 'react';
 import useSWR from 'swr';
-import { apiClient } from '@/lib/api/client';
-
-const fetcher = (url: string) => apiClient.get(url).then(r => r.data.data);
+import { inventoryApi } from '@/lib/api/inventory.api';
 
 export default function InventoryPage() {
   const [search, setSearch] = useState('');
   const [abcFilter, setAbcFilter] = useState('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
 
-  const params = new URLSearchParams();
-  if (search) params.set('search', search);
-  if (abcFilter) params.set('abcCategory', abcFilter);
-  if (lowStockOnly) params.set('lowStockOnly', 'true');
-
   const { data, isLoading } = useSWR(
-    `/api/inventory/items?${params.toString()}`,
-    fetcher
+    ['inventory/items', search, abcFilter, lowStockOnly],
+    () =>
+      inventoryApi.items
+        .list({ search: search || undefined, abcCategory: abcFilter || undefined, lowStockOnly: lowStockOnly || undefined })
+        .then((r: { data?: unknown[] }) => r.data ?? [])
   );
 
   return (

@@ -1,7 +1,10 @@
 'use client';
 
+import { motion } from 'motion/react';
 import { useFinanceDashboard } from '@/hooks/use-finance';
 import { useInventoryAlerts } from '@/hooks/use-inventory';
+import { useRealtimeDsr } from '@/hooks/use-realtime';
+import { useAuthStore } from '@/stores/auth.store';
 
 // ── Helper functions ──────────────────────────────────────────────────────────
 
@@ -112,14 +115,20 @@ function LowStockWidget({ items }: { items: LowStockItem[] }) {
         <p className="text-sm text-gray-400">All items above PAR level ✓</p>
       ) : (
         <ul className="space-y-2">
-          {items.slice(0, 5).map((item) => (
-            <li key={item.id} className="flex items-center justify-between text-sm">
+          {items.slice(0, 5).map((item, index) => (
+            <motion.li
+              key={item.id}
+              className="flex items-center justify-between text-sm"
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: index * 0.05, duration: 0.2 }}
+            >
               <span className="text-gray-700">{item.name}</span>
               <span className="text-red-600 font-medium">
                 {item.currentStock} {item.countUnit}{' '}
                 <span className="text-gray-400">(PAR: {item.parLevel})</span>
               </span>
-            </li>
+            </motion.li>
           ))}
           {items.length > 5 && (
             <li className="text-xs text-gray-400">+{items.length - 5} more items</li>
@@ -172,10 +181,16 @@ function ExpiringItemsWidget({ items }: { items: ExpiringItem[] }) {
         <p className="text-sm text-gray-400">No items expiring in the next 3 days ✓</p>
       ) : (
         <ul className="space-y-2">
-          {items.slice(0, 5).map((item) => {
+          {items.slice(0, 5).map((item, index) => {
             const days = daysUntilExpiry(item.expiryDate);
             return (
-              <li key={item.id} className="flex items-center justify-between text-sm">
+              <motion.li
+                key={item.id}
+                className="flex items-center justify-between text-sm"
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05, duration: 0.2 }}
+              >
                 <span className="text-gray-700">{item.name}</span>
                 <span className={`font-medium ${expiryColor(days)}`}>
                   {expiryLabel(days)}{' '}
@@ -183,7 +198,7 @@ function ExpiringItemsWidget({ items }: { items: ExpiringItem[] }) {
                     ({item.currentStock} {item.countUnit})
                   </span>
                 </span>
-              </li>
+              </motion.li>
             );
           })}
           {items.length > 5 && (
@@ -198,8 +213,12 @@ function ExpiringItemsWidget({ items }: { items: ExpiringItem[] }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const { tenant } = useAuthStore();
   const { data: kpis, isLoading: kpisLoading } = useFinanceDashboard();
   const { data: alerts } = useInventoryAlerts();
+
+  // Live KPI updates — revalidates when any DSR is reconciled
+  useRealtimeDsr(tenant?.id);
 
   return (
     <div className="space-y-6">
@@ -216,7 +235,12 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Row 1 — Revenue */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <motion.div
+        className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+      >
         <KPICard
           label="Yesterday's Sales"
           value={kpis?.netSalesYesterday}
@@ -242,10 +266,15 @@ export default function DashboardPage() {
           prefix="₹"
           isLoading={kpisLoading}
         />
-      </div>
+      </motion.div>
 
       {/* KPI Row 2 — Benchmarks */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <motion.div
+        className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1, ease: 'easeOut' }}
+      >
         <KPICard
           label="Food Cost %"
           value={kpis?.foodCostPercent}
@@ -273,13 +302,18 @@ export default function DashboardPage() {
           </p>
           <p className="text-2xl font-bold mt-1">—</p>
         </div>
-      </div>
+      </motion.div>
 
       {/* Alerts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <motion.div
+        className="grid grid-cols-1 lg:grid-cols-2 gap-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.2, ease: 'easeOut' }}
+      >
         <LowStockWidget items={alerts?.lowStock ?? []} />
         <ExpiringItemsWidget items={alerts?.expiring ?? []} />
-      </div>
+      </motion.div>
     </div>
   );
 }
