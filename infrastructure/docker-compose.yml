@@ -179,6 +179,8 @@ services:
         condition: service_healthy
       rabbitmq-setup:
         condition: service_completed_successfully
+      auth-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health/readiness || exit 1"]
       interval: 15s
@@ -207,6 +209,8 @@ services:
         condition: service_healthy
       rabbitmq-setup:
         condition: service_completed_successfully
+      auth-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health/readiness || exit 1"]
       interval: 15s
@@ -235,6 +239,8 @@ services:
         condition: service_healthy
       rabbitmq-setup:
         condition: service_completed_successfully
+      auth-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8088/actuator/health/readiness || exit 1"]
       interval: 15s

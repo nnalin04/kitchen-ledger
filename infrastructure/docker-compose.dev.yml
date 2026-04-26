@@ -1,0 +1,130 @@
+version: "3.9"
+
+# Dev overrides — apply on top of docker-compose.yml for hot-reload.
+# Usage (from repo root):
+#   docker-compose -f infrastructure/docker-compose.yml \
+#                  -f infrastructure/docker-compose.dev.yml up -d
+#
+# What this does:
+#  - Java services: removes the pre-built image, mounts source + Maven cache for
+#    dev-mode restart (spring-boot:run with devtools reloads on class change).
+#  - Python services: mounts source so Uvicorn --reload picks up file changes.
+#  - Node.js services: mounts source so ts-node-dev / nodemon picks up changes.
+#  - Infra services (postgres, redis, rabbitmq): no changes — use production images.
+
+services:
+
+  # ─────────────────────────────────────────────
+  # JAVA SERVICES — Spring Boot DevTools hot reload
+  # ─────────────────────────────────────────────
+
+  auth-service:
+    build:
+      context: ../services/auth-service
+      dockerfile: Dockerfile.dev
+      target: dev
+    volumes:
+      - ../services/auth-service:/workspace:cached
+      - maven_cache:/root/.m2
+    command: ["mvn", "spring-boot:run", "-Dspring-boot.run.jvmArguments=-Dspring.devtools.restart.enabled=true"]
+    environment:
+      SPRING_DEVTOOLS_RESTART_ENABLED: "true"
+
+  inventory-service:
+    build:
+      context: ../services/inventory-service
+      dockerfile: Dockerfile.dev
+      target: dev
+    volumes:
+      - ../services/inventory-service:/workspace:cached
+      - maven_cache:/root/.m2
+    command: ["mvn", "spring-boot:run", "-Dspring-boot.run.jvmArguments=-Dspring.devtools.restart.enabled=true"]
+    environment:
+      SPRING_DEVTOOLS_RESTART_ENABLED: "true"
+
+  finance-service:
+    build:
+      context: ../services/finance-service
+      dockerfile: Dockerfile.dev
+      target: dev
+    volumes:
+      - ../services/finance-service:/workspace:cached
+      - maven_cache:/root/.m2
+    command: ["mvn", "spring-boot:run", "-Dspring-boot.run.jvmArguments=-Dspring.devtools.restart.enabled=true"]
+    environment:
+      SPRING_DEVTOOLS_RESTART_ENABLED: "true"
+
+  staff-service:
+    build:
+      context: ../services/staff-service
+      dockerfile: Dockerfile.dev
+      target: dev
+    volumes:
+      - ../services/staff-service:/workspace:cached
+      - maven_cache:/root/.m2
+    command: ["mvn", "spring-boot:run", "-Dspring-boot.run.jvmArguments=-Dspring.devtools.restart.enabled=true"]
+    environment:
+      SPRING_DEVTOOLS_RESTART_ENABLED: "true"
+
+  # ─────────────────────────────────────────────
+  # PYTHON SERVICES — Uvicorn --reload
+  # ─────────────────────────────────────────────
+
+  ai-service:
+    volumes:
+      - ../services/ai-service:/app:cached
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8084", "--reload"]
+
+  report-service:
+    volumes:
+      - ../services/report-service:/app:cached
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8087", "--reload"]
+
+  # ─────────────────────────────────────────────
+  # NODE.JS SERVICES — ts-node-dev watch
+  # ─────────────────────────────────────────────
+
+  gateway:
+    volumes:
+      - ../services/gateway:/app:cached
+      - /app/node_modules
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/server.ts"]
+    environment:
+      NODE_ENV: development
+
+  notification-service:
+    volumes:
+      - ../services/notification-service:/app:cached
+      - /app/node_modules
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/server.ts"]
+    environment:
+      NODE_ENV: development
+
+  file-service:
+    volumes:
+      - ../services/file-service:/app:cached
+      - /app/node_modules
+    command: ["npx", "ts-node-dev", "--respawn", "--transpile-only", "src/server.ts"]
+    environment:
+      NODE_ENV: development
+
+  # ─────────────────────────────────────────────
+  # NEXT.JS WEB APP — next dev
+  # ─────────────────────────────────────────────
+
+  web:
+    build:
+      context: ../apps/web
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../apps/web:/app:cached
+      - /app/node_modules
+      - /app/.next
+    command: ["npm", "run", "dev"]
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+
+volumes:
+  maven_cache:

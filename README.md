@@ -1,70 +1,69 @@
 # KitchenLedger
 
-All-in-one restaurant management platform for independent restaurants. Unifies **Inventory**, **Finance/Accounts**, and **Staff/HR** into a single product — web dashboard (Next.js) + mobile app (Expo) — with AI-powered OCR, voice input, and natural language queries.
+All-in-one restaurant management platform built for independent restaurants. KitchenLedger unifies **inventory tracking**, **financial accounting**, and **staff management** into a single affordable product — accessible from a full web dashboard and a mobile app for field operations.
 
-**Target price:** $39–49/month vs. $400–800/month for fragmented alternatives.
+> **Target price:** $39–49/month — a fraction of the $400–800/month teams currently pay for fragmented alternatives.
 
 ---
 
-## Architecture
+## What It Does
+
+KitchenLedger is designed around the daily reality of running a small restaurant:
+
+- **Inventory** — track every ingredient from purchase order to plate. Know what you have, what you're running low on, what went to waste, and what each dish actually costs.
+- **Finance** — record daily sales by payment method, log expenses, track vendor payments, and see your P&L without a spreadsheet.
+- **Staff** — schedule shifts, clock staff in and out, assign tasks, track certifications, and calculate tip distribution.
+- **AI assistance** — point your camera at a handwritten stock count or an invoice and KitchenLedger digitizes it. Speak a stock entry or query your data in plain language.
+- **Reports** — generate P&L summaries, waste analysis, expense breakdowns, and staff hours reports as PDFs or CSVs.
+- **Notifications** — real-time push alerts, emails, and WhatsApp messages for low stock, shift reminders, approvals, and task assignments.
+
+---
+
+## How It's Built
+
+The platform is a monorepo with two client apps and nine backend services that communicate through a central API gateway.
 
 ```
 kitchenledger/
 ├── apps/
-│   ├── web/               # Next.js 14 (App Router) — management dashboard
-│   └── mobile/            # Expo SDK 51 + React Native — field operations
+│   ├── web/            # Full management dashboard (browser)
+│   └── mobile/         # Field operations app (iOS + Android)
 ├── packages/
-│   ├── types/             # Shared TypeScript types (generated from OpenAPI)
-│   ├── ui/                # Shared component library (Tailwind + Radix UI)
-│   └── api-client/        # Generated API clients
+│   ├── types/          # Shared type definitions
+│   ├── ui/             # Shared component library
+│   └── api-client/     # API client used by both apps
 └── services/
-    ├── gateway/           # Fastify :8080 — JWT verify, rate limit, routing
-    ├── auth-service/      # Spring Boot :8081 — tenants, users, JWT, RBAC
-    ├── inventory-service/ # Spring Boot :8082 — items, suppliers, POs, stock
-    ├── finance-service/   # Spring Boot :8083 — DSR, expenses, AP, P&L
-    ├── ai-service/        # FastAPI :8084 — OCR, voice NL, forecasting
-    ├── file-service/      # Fastify :8085 — uploads, pre-signed URLs
-    ├── notification-service/ # Fastify :8086 — push, email, WhatsApp
-    ├── report-service/    # FastAPI :8087 — heavy aggregation, PDF/CSV
-    └── staff-service/     # Spring Boot :8088 — scheduling, attendance, tasks
+    ├── gateway/           # Single entry point for all client traffic
+    ├── auth-service/      # Authentication, users, and tenant management
+    ├── inventory-service/ # Inventory, suppliers, stock movements, and recipes
+    ├── finance-service/   # Sales records, expenses, vendor payments, and P&L
+    ├── ai-service/        # OCR, voice input, and natural language queries
+    ├── file-service/      # File uploads and secure download links
+    ├── notification-service/ # Push, email, and WhatsApp alerts
+    ├── report-service/    # Cross-service aggregation and report generation
+    └── staff-service/     # Scheduling, attendance, tasks, and HR operations
 ```
 
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Web frontend | Next.js 14, TypeScript, Tailwind, Radix UI |
-| Mobile frontend | Expo SDK 51, React Native, TypeScript |
-| Java services | Java 21 + Spring Boot 4.0.5 + Spring Data JPA |
-| Python services | Python 3.12 + FastAPI + Celery + SQLAlchemy 2 |
-| Node services | Node.js 22 + Fastify v4 + TypeScript |
-| Database | PostgreSQL 16 via Supabase (RLS on every tenant table) |
-| Cache | Redis 7 |
-| Message queue | RabbitMQ 3.13 (topic exchange) |
-| Object storage | Supabase Storage |
-| Monorepo | Turborepo |
+Each service has its own `README.md` explaining how to run it and what it does.
 
 ---
 
-## Prerequisites
+## Getting Started
 
-- Docker Desktop (for local infra)
-- Node.js 22
-- Java 21 (Temurin recommended)
-- Python 3.12
+### Prerequisites
 
----
+- Docker Desktop
+- Node.js 22+
+- Java 21+
+- Python 3.12+
 
-## Local Development
+### Run Locally
 
 ```bash
-# 1. Copy environment variables
+# 1. Copy environment variables and fill in required secrets
 cp .env.example .env
-# Fill in required secrets (see Environment Variables below)
 
-# 2. Start infrastructure (PostgreSQL, Redis, RabbitMQ)
+# 2. Start the infrastructure (database, cache, message broker)
 npm run infra:up
 
 # 3. Install all dependencies
@@ -74,7 +73,8 @@ npm install
 npm run dev
 ```
 
-Check health:
+Verify the stack is healthy:
+
 ```bash
 curl http://localhost:8080/health
 ```
@@ -84,63 +84,30 @@ curl http://localhost:8080/health
 ## Running Tests
 
 ```bash
-# All services
+# Run tests across all services
 npm run test
 
-# Single Java service
+# Run tests for a single Java service
 cd services/auth-service && mvn test
 
-# Single Python service
+# Run tests for a single Python service
 cd services/ai-service && pytest
 
-# Single Node service
+# Run tests for a single Node service
 cd services/gateway && npx vitest run
 ```
 
-**Coverage mandate:** 80% minimum across all services.
+80% test coverage is required across all services.
 
 ---
 
-## Environment Variables
+## Environment Setup
 
-Copy `.env.example` → `.env`. Required secrets:
-
-| Variable | Purpose |
-|---|---|
-| `JWT_PRIVATE_KEY` | RSA private key — Auth Service signs JWTs |
-| `JWT_PUBLIC_KEY` | RSA public key — Gateway verifies JWTs |
-| `INTERNAL_SERVICE_SECRET` | Shared secret for inter-service calls |
-| `OPENAI_API_KEY` | AI Service — voice NL queries |
-| `MINDEE_API_KEY` | AI Service — OCR receipt parsing |
-| `RESEND_API_KEY` | Notification Service — transactional email |
-| `EXPO_ACCESS_TOKEN` | Notification Service — mobile push |
-| `SUPABASE_URL` | Database + Storage URL |
-| `SUPABASE_SERVICE_KEY` | Supabase service role key |
-| `SUPABASE_STORAGE_URL` | Storage endpoint |
-
----
-
-## Service Ports
-
-| Service | Port |
-|---|---|
-| API Gateway | 8080 |
-| Auth Service | 8081 |
-| Inventory Service | 8082 |
-| Finance Service | 8083 |
-| AI Service | 8084 |
-| File Service | 8085 |
-| Notification Service | 8086 |
-| Report Service | 8087 |
-| Staff Service | 8088 |
-| PostgreSQL | 5432 |
-| Redis | 6379 |
-| RabbitMQ AMQP | 5672 |
-| RabbitMQ UI | 15672 |
+Copy `.env.example` to `.env`. Each service's `README.md` lists the specific variables that service needs. Never commit `.env` to version control.
 
 ---
 
 ## Reference Docs
 
-- [`docs/KitchenLedger_PRD_Enhanced.md`](docs/KitchenLedger_PRD_Enhanced.md) — Full product requirements
-- [`docs/KitchenLedger_TRD_v2_Microservices.md`](docs/KitchenLedger_TRD_v2_Microservices.md) — Full technical spec
+- [`docs/KitchenLedger_PRD_Enhanced.md`](docs/KitchenLedger_PRD_Enhanced.md) — product requirements and feature specs
+- [`docs/KitchenLedger_TRD_v2_Microservices.md`](docs/KitchenLedger_TRD_v2_Microservices.md) — technical architecture and design decisions

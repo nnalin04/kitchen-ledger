@@ -105,7 +105,7 @@ The forgot-password flow publishes an event that has no RabbitMQ binding and no 
 
 ---
 
-### [ ] NH-1 — Cross-service Flyway migration dependency on `audit_trigger_fn()` has no ordering guarantee
+### [x] NH-1 — Cross-service Flyway migration dependency on `audit_trigger_fn()` has no ordering guarantee
 
 **What this fixes**
 `audit_trigger_fn()` is defined in `services/auth-service` migration `V2__audit_triggers.sql`. The inventory, finance, and staff services all call this function in their own `V2`/`V3`/`V4` trigger migrations. If any of those services run their migration before auth-service has run its V2, the migration fails with `function audit_trigger_fn() does not exist` and the service cannot start.
@@ -244,7 +244,7 @@ Two concurrent HTTP requests to confirm the same stock receipt can both pass the
 
 ---
 
-### [ ] NH-5 — `event_outbox` table has `tenant_id` column but no RLS policy
+### [x] NH-5 — `event_outbox` table has `tenant_id` column but no RLS policy
 
 **What this fixes**
 The outbox table stores sensitive event payloads (including user data, financial amounts, token values) scoped by tenant. Without RLS, a compromised DB session could read or write cross-tenant outbox rows.
@@ -276,7 +276,7 @@ The outbox table stores sensitive event payloads (including user data, financial
 
 ---
 
-### [ ] NH-6 — `AttendanceService.checkOvertimeApproaching()` hardcodes timezone `Asia/Kolkata`
+### [x] NH-6 — `AttendanceService.checkOvertimeApproaching()` hardcodes timezone `Asia/Kolkata`
 
 **What this fixes**
 Multi-tenant SaaS serving restaurants in multiple timezones. Overtime calculations using a hardcoded timezone produce wrong results (and compliance failures) for any tenant not in `Asia/Kolkata`.
@@ -312,7 +312,7 @@ Multi-tenant SaaS serving restaurants in multiple timezones. Overtime calculatio
 
 ---
 
-### [ ] NM-1 — `publishUserInvited()` payload missing `full_name` and `tenant_name`
+### [x] NM-1 — `publishUserInvited()` payload missing `full_name` and `tenant_name`
 
 **What this fixes**
 Invite emails address recipients by their email address instead of their name because the event payload doesn't include `full_name` or `tenant_name`. Poor UX and unprofessional for a restaurant management product.
@@ -338,7 +338,7 @@ Invite emails address recipients by their email address instead of their name be
 
 ---
 
-### [ ] NM-2 — `generatePoNumber()` collision probability too high for production volume
+### [x] NM-2 — `generatePoNumber()` collision probability too high for production volume
 
 **What this fixes**
 PO numbers use a 4-character random hex suffix (65,536 combinations). At 100 POs/day per tenant, the birthday paradox gives ~7% collision probability within ~300 POs. Collisions cause duplicate PO numbers in a tenant's records — an accounting and audit problem.
@@ -368,7 +368,7 @@ PO numbers use a 4-character random hex suffix (65,536 combinations). At 100 POs
 
 ---
 
-### [ ] NM-3 — Notification-service `assertQueue` missing `x-dead-letter-exchange` argument
+### [x] NM-3 — Notification-service `assertQueue` missing `x-dead-letter-exchange` argument
 
 **What this fixes**
 If the queue was previously declared without the `x-dead-letter-exchange` argument and the service restarts with it added, RabbitMQ throws `PRECONDITION_FAILED` and the connection drops. Currently the queue declaration has no DLQ routing, so permanently failed events are discarded.
@@ -406,7 +406,7 @@ If the queue was previously declared without the `x-dead-letter-exchange` argume
 
 ---
 
-### [ ] NM-4 — `ExpenseService.createFromOcr()` uses nil UUID as `createdBy`
+### [x] NM-4 — `ExpenseService.createFromOcr()` uses nil UUID as `createdBy`
 
 **What this fixes**
 `new UUID(0L, 0L)` (all-zeros UUID) is used as the `createdBy` value when creating expenses from OCR. This is not a valid user ID, risks FK constraint violations if `expenses.created_by` references `users.id`, and produces audit logs with a meaningless actor.
@@ -438,7 +438,7 @@ If the queue was previously declared without the `x-dead-letter-exchange` argume
 
 ---
 
-### [ ] NM-5 — `AttendanceService.listByEmployee()` returns unbounded list — no pagination
+### [x] NM-5 — `AttendanceService.listByEmployee()` returns unbounded list — no pagination
 
 **What this fixes**
 Loading all attendance records for an employee with no limit returns an unbounded result set. A restaurant with 2 years of daily records has ~730 rows per employee; a 50-person team means 36,500 rows in a single query response. This causes OOM risk, slow API responses, and excessive DB load.
@@ -467,7 +467,7 @@ Loading all attendance records for an employee with no limit returns an unbounde
 
 ---
 
-### [ ] NM-6 — `StockReceiptService.prefillFromOcr()` silently picks wrong inventory item
+### [x] NM-6 — `StockReceiptService.prefillFromOcr()` silently picks wrong inventory item
 
 **What this fixes**
 OCR prefill uses `ILIKE` with `PageRequest.of(0, 1)` — it takes the first alphabetical match with no relevance ranking. If "Chicken Breast" and "Chicken Wings" both match "Chicken", the prefill silently picks one at random (by DB sort order), potentially recording stock movement against the wrong item with no warning.
@@ -502,7 +502,7 @@ OCR prefill uses `ILIKE` with `PageRequest.of(0, 1)` — it takes the first alph
 
 ---
 
-### [ ] NM-7 — `NoShowDetectionJob` has zero test coverage
+### [x] NM-7 — `NoShowDetectionJob` has zero test coverage
 
 **What this fixes**
 The no-show detection job runs every 15 minutes in production and marks shifts as `no_show`, firing `staff.employee.noshow` events. Zero tests means regressions go undetected (e.g., wrong time threshold, wrong status filter, double event emission).
@@ -531,7 +531,7 @@ The no-show detection job runs every 15 minutes in production and marks shifts a
 
 ---
 
-### [ ] NM-8 — `CertificationExpiryJob`, `CertificationController`, `CertificationService` have zero test coverage
+### [x] NM-8 — `CertificationExpiryJob`, `CertificationController`, `CertificationService` have zero test coverage
 
 **What this fixes**
 Certification expiry is a compliance feature (food-handler card expiry, health certificates). Untested logic here can cause missed alerts or incorrect cert status transitions, creating real liability.
@@ -560,7 +560,7 @@ Certification expiry is a compliance feature (food-handler card expiry, health c
 
 ---
 
-### [ ] NM-9 — `OutboxReplayJob` has zero tests and no duplicate-replay guard
+### [x] NM-9 — `OutboxReplayJob` has zero tests and no duplicate-replay guard
 
 **What this fixes**
 The outbox replay job runs every 5 minutes. Without tests, replay logic regressions are invisible. Without a `SELECT FOR UPDATE` or status lock on outbox rows, two concurrent job executions (e.g., in multi-instance deploy) can replay the same event twice, causing duplicate notifications, double inventory increments, etc.
@@ -585,7 +585,7 @@ The outbox replay job runs every 5 minutes. Without tests, replay logic regressi
 
 ---
 
-### [ ] NM-10 — Error messages reference non-existent override endpoints
+### [x] NM-10 — Error messages reference non-existent override endpoints
 
 **What this fixes**
 `ShiftService.publish()` and `PurchaseOrderService.close()` return error messages like "Use force-publish override" and "Use force-close override" but no such endpoints exist. Operators following error message guidance will get 404s, causing confusion and failed workflows.
@@ -613,7 +613,7 @@ The outbox replay job runs every 5 minutes. Without tests, replay logic regressi
 
 ---
 
-### [ ] NM-11 — `audit_trigger_fn()` reads `app.current_user_id` which is never SET — all audit logs have NULL `user_id`
+### [x] NM-11 — `audit_trigger_fn()` reads `app.current_user_id` which is never SET — all audit logs have NULL `user_id`
 
 **What this fixes**
 The audit trigger captures who made every write. But because no application code ever sets `SET LOCAL app.current_user_id = '<id>'` in the DB session, every audit log row has `user_id = NULL`. The audit trail is useless for compliance and incident investigation.
@@ -652,7 +652,7 @@ The audit trigger captures who made every write. But because no application code
 
 ---
 
-### [ ] NL-1 — Currency hardcoded to `"INR"` in all event payloads
+### [x] NL-1 — Currency hardcoded to `"INR"` in all event payloads
 
 **What this fixes**
 All RabbitMQ event payloads that include monetary amounts hardcode `"currency": "INR"`. Multi-tenant SaaS needs to use the tenant's configured currency. Any tenant not using INR will have incorrect currency labels on notifications, reports, and downstream integrations.
@@ -672,7 +672,7 @@ All RabbitMQ event payloads that include monetary amounts hardcode `"currency": 
 
 ---
 
-### [ ] NL-2 — `NoShowDetectionJob.detectNoShows()` loads all overdue shifts without pagination
+### [x] NL-2 — `NoShowDetectionJob.detectNoShows()` loads all overdue shifts without pagination
 
 **What this fixes**
 At high shift volume, loading all overdue shifts in a single query creates a large in-memory list and a slow DB scan. Should process in batches to stay memory-bounded.
@@ -695,7 +695,7 @@ At high shift volume, loading all overdue shifts in a single query creates a lar
 
 ---
 
-### [ ] NL-3 — `OverduePaymentJob` and `ExpiryCheckJob` abort remaining tenants on single-tenant failure
+### [x] NL-3 — `OverduePaymentJob` and `ExpiryCheckJob` abort remaining tenants on single-tenant failure
 
 **What this fixes**
 If one tenant's data causes an exception, the job stops processing all remaining tenants. One bad tenant poisons the batch for the entire platform.
@@ -717,7 +717,7 @@ If one tenant's data causes an exception, the job stops processing all remaining
 
 ---
 
-### [ ] NL-4 — RabbitMQ reconnect uses flat 5-second delay — should use exponential backoff
+### [x] NL-4 — RabbitMQ reconnect uses flat 5-second delay — should use exponential backoff
 
 **What this fixes**
 When RabbitMQ is unavailable and the connection is lost, all Node.js services (gateway, notification-service, file-service) retry with a flat 5-second delay. During sustained outages, this hammers the broker unnecessarily and can create thundering-herd reconnect storms when RabbitMQ comes back up.
@@ -738,7 +738,7 @@ When RabbitMQ is unavailable and the connection is lost, all Node.js services (g
 
 ---
 
-### [ ] NL-5 — Raw invite token travels in plaintext through RabbitMQ payload and outbox DB
+### [x] NL-5 — Raw invite token travels in plaintext through RabbitMQ payload and outbox DB
 
 **What this fixes**
 `publishUserInvited()` includes the raw `invite_token` in the event payload. This token is stored in the `event_outbox` DB table and transmitted through RabbitMQ. Anyone with DB read access or RabbitMQ management access can see valid invite tokens and use them to gain unauthorized access.
