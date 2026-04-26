@@ -18,4 +18,7 @@ public interface VendorRepository extends JpaRepository<Vendor, UUID> {
     Page<Vendor> findByTenantIdAndDeletedAtIsNull(UUID tenantId, Pageable pageable);
 
     boolean existsByTenantIdAndNameIgnoreCaseAndDeletedAtIsNull(UUID tenantId, String name);
+
+    /** Fuzzy vendor match by name substring — used by OCR update to resolve vendor_id. */
+    List<Vendor> findByTenantIdAndNameContainingIgnoreCaseAndDeletedAtIsNull(UUID tenantId, String name);
 }

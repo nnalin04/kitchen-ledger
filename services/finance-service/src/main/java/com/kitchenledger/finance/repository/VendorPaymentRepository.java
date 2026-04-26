@@ -52,4 +52,34 @@ public interface VendorPaymentRepository extends JpaRepository<VendorPayment, UU
     /** Used only by the scheduled job to discover which tenants have overdue payments. */
     @Query("SELECT DISTINCT vp.tenantId FROM VendorPayment vp WHERE vp.paymentStatus = 'pending' AND vp.dueDate < :today")
     List<UUID> findDistinctTenantsWithOverdue(@Param("today") LocalDate today);
+
+    /**
+     * All unpaid (pending or overdue) vendor payments for a tenant, ordered by due date ascending.
+     * Used by the AP aging report.
+     */
+    @Query("""
+        SELECT vp FROM VendorPayment vp
+        WHERE vp.tenantId = :tenantId
+          AND vp.paymentStatus IN ('pending', 'overdue')
+        ORDER BY vp.dueDate ASC NULLS LAST
+        """)
+    List<VendorPayment> findUnpaidByTenant(@Param("tenantId") UUID tenantId);
+
+    /** Count of unpaid vendor payments for dashboard KPI. */
+    @Query("""
+        SELECT COUNT(vp)
+        FROM VendorPayment vp
+        WHERE vp.tenantId = :tenantId
+          AND vp.paymentStatus IN ('pending', 'overdue')
+        """)
+    long countUnpaidByTenant(@Param("tenantId") UUID tenantId);
+
+    /** Total outstanding amount for dashboard KPI. */
+    @Query("""
+        SELECT COALESCE(SUM(vp.amount), 0)
+        FROM VendorPayment vp
+        WHERE vp.tenantId = :tenantId
+          AND vp.paymentStatus IN ('pending', 'overdue')
+        """)
+    BigDecimal sumUnpaidByTenant(@Param("tenantId") UUID tenantId);
 }

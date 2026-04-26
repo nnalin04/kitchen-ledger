@@ -48,8 +48,20 @@ public class FinanceEventListener {
             try { initiatedBy = UUID.fromString(initiatedByStr); } catch (IllegalArgumentException ignored) {}
         }
 
-        log.info("FinanceEventListener: creating expense from OCR result for tenant {} (doc_type={})",
-                tenantId, docType);
-        expenseService.createFromOcr(tenantId, initiatedBy, payload);
+        String referenceId = (String) payload.get("reference_id");
+        if (referenceId != null && !referenceId.isBlank()) {
+            try {
+                UUID expenseId = UUID.fromString(referenceId);
+                log.info("FinanceEventListener: updating expense {} from OCR result for tenant {} (doc_type={})",
+                        expenseId, tenantId, docType);
+                expenseService.updateFromOcr(tenantId, expenseId, payload);
+            } catch (IllegalArgumentException e) {
+                log.warn("FinanceEventListener: reference_id '{}' is not a valid UUID, skipping update", referenceId);
+            }
+        } else {
+            log.info("FinanceEventListener: creating expense from OCR result for tenant {} (doc_type={})",
+                    tenantId, docType);
+            expenseService.createFromOcr(tenantId, initiatedBy, payload);
+        }
     }
 }

@@ -125,6 +125,8 @@ class OverduePaymentJobTest {
                 .thenReturn(List.of(vp3));
         when(vendorPaymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(tenantCurrencyResolver.resolve(tenant1)).thenReturn("INR");
+        // tenant2 must also be stubbed — processForTenant calls resolve() before findOverdue()
+        when(tenantCurrencyResolver.resolve(tenant2)).thenReturn("INR");
         when(tenantCurrencyResolver.resolve(tenant3)).thenReturn("INR");
 
         // Must not throw — job isolates per-tenant failures

@@ -2,9 +2,11 @@ package com.kitchenledger.finance.controller;
 
 import com.kitchenledger.finance.dto.response.DsrResponse;
 import com.kitchenledger.finance.dto.response.ExpenseResponse;
+import com.kitchenledger.finance.dto.response.PLReportResponse;
 import com.kitchenledger.finance.exception.AccessDeniedException;
 import com.kitchenledger.finance.repository.DailySalesReportRepository;
 import com.kitchenledger.finance.repository.ExpenseRepository;
+import com.kitchenledger.finance.service.PLReportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
@@ -33,6 +35,7 @@ public class InternalFinanceController {
 
     private final DailySalesReportRepository dsrRepository;
     private final ExpenseRepository expenseRepository;
+    private final PLReportService plReportService;
     private final JdbcTemplate jdbcTemplate;
 
     @Value("${internal.service-secret}")
@@ -97,6 +100,28 @@ public class InternalFinanceController {
                 sql, tenantId, fromInstant, toInstant,
                 userIdStr, userIdStr, eventType, eventType);
         return ResponseEntity.ok(rows);
+    }
+
+    /**
+     * P&L data for the report-service to use in scheduled PDF/CSV exports.
+     * Supports an optional comparison period via compare_start / compare_end.
+     *
+     * <p>Example:
+     * {@code GET /internal/finance/pl-data?tenantId=...&start=2026-04-01&end=2026-04-30}
+     */
+    @GetMapping("/pl-data")
+    public ResponseEntity<PLReportResponse> plData(
+            @RequestHeader("x-internal-secret") String secret,
+            @RequestParam UUID tenantId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end,
+            @RequestParam(name = "compare_start", required = false)
+                @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate compareStart,
+            @RequestParam(name = "compare_end", required = false)
+                @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate compareEnd) {
+        verifySecret(secret);
+        PLReportResponse report = plReportService.generate(tenantId, start, end, compareStart, compareEnd);
+        return ResponseEntity.ok(report);
     }
 
     private void verifySecret(String provided) {

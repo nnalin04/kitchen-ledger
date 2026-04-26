@@ -1,6 +1,7 @@
 package com.kitchenledger.finance.model;
 
 import com.kitchenledger.finance.model.enums.PaymentMethod;
+import com.kitchenledger.finance.model.enums.PaymentStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -53,6 +54,14 @@ public class Expense {
     @Column(name = "is_recurring", nullable = false)
     @Builder.Default
     private boolean recurring = false;
+
+    @Column(name = "due_date")
+    private LocalDate dueDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_status", nullable = false)
+    @Builder.Default
+    private PaymentStatus paymentStatus = PaymentStatus.pending;
 
     @Column(name = "account_id")
     private UUID accountId;

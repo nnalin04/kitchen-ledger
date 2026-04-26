@@ -6,6 +6,7 @@ import com.kitchenledger.finance.exception.ResourceNotFoundException;
 import com.kitchenledger.finance.model.Expense;
 import com.kitchenledger.finance.model.enums.PaymentMethod;
 import com.kitchenledger.finance.repository.ExpenseRepository;
+import com.kitchenledger.finance.repository.VendorRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -25,6 +26,7 @@ import java.util.UUID;
 public class ExpenseService {
 
     private final ExpenseRepository expenseRepository;
+    private final VendorRepository vendorRepository;
     private final FinanceEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
@@ -131,6 +133,59 @@ public class ExpenseService {
         // initiatedBy is null when ai-service doesn't supply a user context — allowed by DB
         create(tenantId, initiatedBy, req);
         log.info("ExpenseService.createFromOcr: created expense for tenant {} from OCR (vendor: {})", tenantId, vendorName);
+    }
+
+    /**
+     * Updates an existing expense with fields extracted from an OCR result.
+     * Called when ai.ocr.completed carries a reference_id pointing to an existing expense.
+     * Fields updated: amount, vendor_id (fuzzy-matched by name), receipt_url, description.
+     * The "[OCR Updated]" prefix marks the entry for staff review.
+     */
+    @Transactional
+    public void updateFromOcr(UUID tenantId, UUID expenseId, Map<String, Object> ocrPayload) {
+        expenseRepository.findByIdAndTenantIdAndDeletedAtIsNull(expenseId, tenantId).ifPresentOrElse(expense -> {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = (Map<String, Object>) ocrPayload.get("result");
+            if (result == null) {
+                log.warn("ExpenseService.updateFromOcr: no 'result' key in OCR payload for expense {}, skipping", expenseId);
+                return;
+            }
+
+            // Update amount if present and valid
+            String amountStr = String.valueOf(result.get("total_amount"));
+            if (result.containsKey("total_amount") && !"null".equals(amountStr)) {
+                try {
+                    BigDecimal amount = new BigDecimal(amountStr);
+                    if (amount.compareTo(BigDecimal.ZERO) > 0) {
+                        expense.setAmount(amount);
+                    }
+                } catch (NumberFormatException e) {
+                    log.warn("ExpenseService.updateFromOcr: invalid total_amount '{}' for expense {}", amountStr, expenseId);
+                }
+            }
+
+            // Fuzzy-match vendor by name
+            String vendorName = (String) result.get("vendor_name");
+            if (vendorName != null && !vendorName.isBlank()) {
+                vendorRepository.findByTenantIdAndNameContainingIgnoreCaseAndDeletedAtIsNull(tenantId, vendorName)
+                        .stream().findFirst()
+                        .ifPresent(v -> expense.setVendorId(v.getId()));
+            }
+
+            // Update receipt URL if present
+            String fileUrl = (String) result.get("file_url");
+            if (fileUrl != null && !fileUrl.isBlank()) {
+                expense.setReceiptUrl(fileUrl);
+            }
+
+            // Prefix description to indicate OCR update for staff review
+            if (!expense.getDescription().startsWith("[OCR Updated]")) {
+                expense.setDescription("[OCR Updated] " + expense.getDescription());
+            }
+
+            expenseRepository.save(expense);
+            log.info("ExpenseService.updateFromOcr: updated expense {} for tenant {} from OCR", expenseId, tenantId);
+        }, () -> log.warn("ExpenseService.updateFromOcr: expense {} not found for tenant {}, skipping", expenseId, tenantId));
     }
 
     @Transactional

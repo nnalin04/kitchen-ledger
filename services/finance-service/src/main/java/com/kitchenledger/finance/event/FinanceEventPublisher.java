@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kitchenledger.finance.model.DailySalesReport;
 import com.kitchenledger.finance.model.Expense;
 import com.kitchenledger.finance.model.VendorPayment;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
@@ -149,6 +150,90 @@ public class FinanceEventPublisher {
                 "amount",     vp.getAmount().toPlainString(),
                 "due_date",   vp.getDueDate().toString(),
                 "currency",   currency
+        ));
+    }
+
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public void publishPaymentDue(Expense expense, String currency) {
+        Map<String, Object> payload = Map.of(
+                "expense_id",  expense.getId().toString(),
+                "category",    expense.getCategory(),
+                "amount",      expense.getAmount().toPlainString(),
+                "due_date",    expense.getDueDate() != null ? expense.getDueDate().toString() : "",
+                "currency",    currency
+        );
+        publishEnvelope(expense.getTenantId(), "finance.expense.due", payload);
+    }
+
+    @Recover
+    public void recoverPublishPaymentDue(AmqpException ex, Expense expense, String currency) {
+        log.error("CRITICAL: Event publish failed after 3 retries for key finance.expense.due. Saving to outbox.", ex);
+        saveToOutbox(expense.getTenantId(), "finance.expense.due", Map.of(
+                "expense_id",  expense.getId().toString(),
+                "category",    expense.getCategory(),
+                "amount",      expense.getAmount().toPlainString(),
+                "due_date",    expense.getDueDate() != null ? expense.getDueDate().toString() : "",
+                "currency",    currency
+        ));
+    }
+
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public void publishExpenseOverdue(Expense expense, String currency) {
+        Map<String, Object> payload = Map.of(
+                "expense_id",  expense.getId().toString(),
+                "category",    expense.getCategory(),
+                "amount",      expense.getAmount().toPlainString(),
+                "due_date",    expense.getDueDate() != null ? expense.getDueDate().toString() : "",
+                "currency",    currency
+        );
+        publishEnvelope(expense.getTenantId(), "finance.expense.overdue", payload);
+    }
+
+    @Recover
+    public void recoverPublishExpenseOverdue(AmqpException ex, Expense expense, String currency) {
+        log.error("CRITICAL: Event publish failed after 3 retries for key finance.expense.overdue. Saving to outbox.", ex);
+        saveToOutbox(expense.getTenantId(), "finance.expense.overdue", Map.of(
+                "expense_id",  expense.getId().toString(),
+                "category",    expense.getCategory(),
+                "amount",      expense.getAmount().toPlainString(),
+                "due_date",    expense.getDueDate() != null ? expense.getDueDate().toString() : "",
+                "currency",    currency
+        ));
+    }
+
+    @Retryable(
+        retryFor = AmqpException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000)
+    )
+    public void publishWeeklySummary(UUID tenantId, BigDecimal weeklyRevenue,
+                                     LocalDate from, LocalDate to, String currency) {
+        Map<String, Object> payload = Map.of(
+                "week_start",      from.toString(),
+                "week_end",        to.toString(),
+                "weekly_revenue",  weeklyRevenue.toPlainString(),
+                "currency",        currency
+        );
+        publishEnvelope(tenantId, "finance.weekly.summary", payload);
+    }
+
+    @Recover
+    public void recoverPublishWeeklySummary(AmqpException ex, UUID tenantId, BigDecimal weeklyRevenue,
+                                             LocalDate from, LocalDate to, String currency) {
+        log.error("CRITICAL: Event publish failed after 3 retries for key finance.weekly.summary. Saving to outbox.", ex);
+        saveToOutbox(tenantId, "finance.weekly.summary", Map.of(
+                "week_start",      from.toString(),
+                "week_end",        to.toString(),
+                "weekly_revenue",  weeklyRevenue.toPlainString(),
+                "currency",        currency
         ));
     }
 
