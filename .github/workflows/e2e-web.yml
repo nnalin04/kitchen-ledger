@@ -1,0 +1,75 @@
+name: Web E2E Tests (Playwright)
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 03:00 UTC nightly (after nightly-e2e.yml)
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment URL'
+        required: false
+        default: 'http://localhost:3000'
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Create .env for E2E
+        run: |
+          cat > apps/web/.env.test.local << 'EOF'
+          PLAYWRIGHT_BASE_URL=${{ github.event.inputs.environment || 'http://localhost:3000' }}
+          PLAYWRIGHT_API_URL=http://localhost:8080
+          EOF
+
+      - name: Start full stack (for local runs)
+        if: github.event_name == 'schedule'
+        run: |
+          cp .env.example .env
+          # Override test values
+          echo "INTERNAL_SERVICE_SECRET=ci-e2e-secret" >> .env
+          echo "JWT_PRIVATE_KEY=${CI_JWT_PRIVATE_KEY}" >> .env
+          echo "JWT_PUBLIC_KEY=${CI_JWT_PUBLIC_KEY}" >> .env
+          docker compose -f infrastructure/docker-compose.yml up -d
+          # Wait for health
+          for i in {1..30}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "000")
+            [[ "$STATUS" == "200" ]] && break
+            sleep 5
+          done
+        env:
+          CI_JWT_PRIVATE_KEY: ${{ secrets.JWT_PRIVATE_KEY_TEST }}
+          CI_JWT_PUBLIC_KEY: ${{ secrets.JWT_PUBLIC_KEY_TEST }}
+
+      - name: Run Playwright tests
+        working-directory: apps/web
+        run: npx playwright test
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ github.event.inputs.environment || 'http://localhost:3000' }}
+          PLAYWRIGHT_API_URL: http://localhost:8080
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 14

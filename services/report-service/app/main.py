@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-import logging
 
 from app.core.config import settings
+import logging
+from app.core.logging_config import configure_logging
+
+configure_logging()
 from app.core.exceptions import (  # noqa: E402 — must be before router import
     ServiceException,
     NotFoundException,

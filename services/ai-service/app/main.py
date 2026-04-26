@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-import logging
 
 from app.core.config import settings
 from app.core.exceptions import ServiceException, NotFoundException, AccessDeniedException  # noqa: F401
+from app.core.logging_config import configure_logging, get_logger
 
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = get_logger(__name__)
 
 # Import routers AFTER defining exceptions to avoid circular imports.
 # Routers import from app.core.exceptions (not from app.main).

@@ -1,0 +1,82 @@
+# Cloud Run service configuration reference
+# Actual deployments use deploy.sh — this file documents the intended config
+# and can be used with: gcloud run services replace cloudrun.yaml
+
+# ── Gateway ──────────────────────────────────────────────────────────────────
+# Domain: api.kitchenledger.app → gateway-production
+# Min instances: 1 (no cold start on login)
+# Public: Yes (via Cloud Run domain mapping behind Cloud Armor)
+gateway:
+  min_instances: 1
+  max_instances: 10
+  cpu: "1"
+  memory: 256Mi
+  concurrency: 1000
+  timeout: 60
+  domain: api.kitchenledger.app
+  allow_unauthenticated: false  # Cloud Armor handles public access
+
+# ── Auth Service ─────────────────────────────────────────────────────────────
+auth_service:
+  min_instances: 1
+  max_instances: 5
+  cpu: "1"
+  memory: 512Mi
+  concurrency: 100
+  timeout: 30
+
+# ── Java domain services ──────────────────────────────────────────────────────
+# inventory, finance, staff: identical config
+java_domain:
+  min_instances: 0
+  max_instances: 5
+  cpu: "1"
+  memory: 512Mi
+  concurrency: 80
+  timeout: 60
+
+# ── AI Service ──────────────────────────────────────────────────────────────
+ai_service:
+  min_instances: 0
+  max_instances: 3
+  cpu: "2"
+  memory: 1Gi
+  concurrency: 10  # OCR jobs are CPU/memory heavy
+  timeout: 300     # OCR can take up to 5 minutes
+
+# ── Report Service ────────────────────────────────────────────────────────────
+report_service:
+  min_instances: 0
+  max_instances: 2
+  cpu: "1"
+  memory: 512Mi
+  concurrency: 5   # PDF generation is memory-intensive
+  timeout: 300
+
+# ── Node.js support services ──────────────────────────────────────────────────
+node_services:
+  min_instances: 0
+  max_instances: 3
+  cpu: "0.5"
+  memory: 256Mi
+  concurrency: 200
+  timeout: 30
+
+# ── VPC Connector (required for Redis + RabbitMQ) ─────────────────────────────
+vpc_connector:
+  name: kitchenledger-connector
+  network: default
+  region: us-central1
+  ip_range: 10.8.0.0/28
+
+# ── Cloud Armor policy (Gateway) ─────────────────────────────────────────────
+cloud_armor:
+  policy: kitchenledger-gateway-policy
+  rules:
+    - priority: 1000
+      action: allow
+      match: { versioned_expr: SRC_IPS_V1, config: { src_ip_ranges: ["*"] } }
+    - priority: 2000
+      action: throttle
+      match: { versioned_expr: SRC_IPS_V1 }
+      rate_limit: { count: 100, interval: 60 }  # 100 req/min per IP
