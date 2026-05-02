@@ -101,7 +101,7 @@ describe('Image compression', () => {
 
   it('does not apply sharp processing to PDF buffers', () => {
     // PDF has mime type "application/pdf" — mimeType.startsWith('image/') is false
-    const mimeType = 'application/pdf';
+    const mimeType: string = 'application/pdf';
     const shouldProcess = mimeType.startsWith('image/') && mimeType !== 'image/gif';
     expect(shouldProcess).toBe(false);
   });

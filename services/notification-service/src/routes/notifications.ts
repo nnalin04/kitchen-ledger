@@ -144,7 +144,6 @@ export async function registerNotificationRoutes(app: FastifyInstance): Promise<
 
     return reply.send({ success: true });
   });
-}
 
   // ── Internal: direct send (service-to-service) ───────────────────────
   // Protected by INTERNAL_SERVICE_SECRET header, not gateway JWT.

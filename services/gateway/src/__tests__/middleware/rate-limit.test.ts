@@ -74,7 +74,7 @@ async function applyRateLimit(
 
 describe('per-route rate limit hook', () => {
 
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   // ── Login (10 / 15 min) ───────────────────────────────────────────────────
 

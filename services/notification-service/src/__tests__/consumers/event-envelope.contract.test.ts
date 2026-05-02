@@ -50,7 +50,8 @@ async function emitEnvelope(envelope: Record<string, unknown>) {
 }
 
 describe('event envelope contract', () => {
-  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let consoleErrorSpy: { mockRestore: () => void; [key: string]: any };
 
   beforeEach(async () => {
     vi.clearAllMocks();

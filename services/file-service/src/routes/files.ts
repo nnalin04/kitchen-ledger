@@ -100,7 +100,7 @@ export async function fileRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Image compression: resize to max 2000x2000 and convert to JPEG (except GIFs)
-    let processedBuffer = buffer;
+    let processedBuffer: Buffer<ArrayBufferLike> = buffer;
     let finalMimeType = mimeType;
     let finalExt = data.filename.split('.').pop() ?? 'bin';
 

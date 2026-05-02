@@ -55,7 +55,7 @@ describe('dispatch()', () => {
     });
 
     expect(mockQuery).toHaveBeenCalledOnce();
-    const [sql, params] = mockQuery.mock.calls[0] as [string, unknown[]];
+    const [sql, params] = mockQuery.mock.calls[0] as [string, unknown[], ...unknown[]];
     expect(sql).toContain('INSERT INTO notifications');
     expect(params[0]).toBe('tenant-123');   // tenant_id
     expect(params[1]).toBe('user-456');     // user_id
@@ -163,7 +163,7 @@ describe('dispatchWelcomeEmail()', () => {
 
     // dispatch() makes one INSERT call
     expect(mockQuery).toHaveBeenCalledOnce();
-    const [sql] = mockQuery.mock.calls[0] as [string, unknown[]];
+    const [sql] = mockQuery.mock.calls[0] as [string, unknown[], ...unknown[]];
     expect(sql).toContain('INSERT INTO notifications');
   });
 });
@@ -178,13 +178,13 @@ describe('dispatchInvitationEmail()', () => {
       email:       'staff@spicegarden.com',
       fullName:    'Priya Singh',
       role:        'kitchen_staff',
-      inviteToken: 'raw-invite-token-abc',
+      inviteUrl: 'https://app.kitchenledger.com/invite/raw-invite-token-abc',
       tenantName:  'Spice Garden',
     });
 
     expect(invitationEmail).toHaveBeenCalledWith(expect.objectContaining({
       fullName:    'Priya Singh',
-      inviteToken: 'raw-invite-token-abc',
+      inviteUrl: 'https://app.kitchenledger.com/invite/raw-invite-token-abc',
       role:        'kitchen_staff',
     }));
 
@@ -200,7 +200,7 @@ describe('dispatchInvitationEmail()', () => {
       email:       'staff@spicegarden.com',
       fullName:    'Priya Singh',
       role:        'server',
-      inviteToken: 'abc',
+      inviteUrl: 'https://app.kitchenledger.com/invite/abc',
       tenantName:  'Spice Garden',
     });
 

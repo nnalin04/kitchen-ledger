@@ -1,4 +1,4 @@
-import amqplib, { Connection, Channel } from 'amqplib';
+import amqplib, { ChannelModel, Channel } from 'amqplib';
 import { z } from 'zod';
 import { config } from '../config';
 import {
@@ -35,7 +35,7 @@ const BINDINGS = [
   'staff.certification.expiring',
 ];
 
-let connection: Connection | null = null;
+let connection: ChannelModel | null = null;
 let channel: Channel | null = null;
 
 const EventEnvelopeSchema = z.object({

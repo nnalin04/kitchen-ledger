@@ -11,7 +11,10 @@ interface ServiceStatus {
 async function pingService(url: string, name: string): Promise<ServiceStatus> {
   const start = Date.now();
   try {
-    const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 3000);
+    const res = await fetch(`${url}/health`, { signal: ac.signal });
+    clearTimeout(t);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return { status: 'ok', latency_ms: Date.now() - start };
   } catch (err) {
