@@ -1,0 +1,63 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: asia-south1
+  REGISTRY: asia-south1-docker.pkg.dev
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - auth-service
+          - inventory-service
+          - finance-service
+          - staff-service
+          - ai-service
+          - report-service
+          - gateway
+          - notification-service
+          - file-service
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker ${{ env.REGISTRY }}
+      - name: Build and push ${{ matrix.service }}
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/kitchenledger/${{ matrix.service }}:${{ github.sha }} \
+            services/${{ matrix.service }}
+          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/kitchenledger/${{ matrix.service }}:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Deploy all services
+        run: |
+          for service in auth-service inventory-service finance-service staff-service ai-service report-service gateway notification-service file-service; do
+            gcloud run deploy $service \
+              --image ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/kitchenledger/$service:${{ github.sha }} \
+              --region ${{ env.REGION }} \
+              --no-allow-unauthenticated \
+              --platform managed \
+              --quiet
+          done
+      - name: Smoke test
+        run: |
+          GATEWAY_URL=$(gcloud run services describe gateway --region ${{ env.REGION }} --format 'value(status.url)')
+          curl -f "$GATEWAY_URL/health" || exit 1
