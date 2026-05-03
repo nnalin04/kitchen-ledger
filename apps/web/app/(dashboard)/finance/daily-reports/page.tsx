@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { financeApi } from '@/lib/api/finance.api';
 
 interface TrendDay {
@@ -17,7 +17,7 @@ const STATUS_COLOR: Record<string, string> = {
   RECONCILED: 'bg-emerald-500',
   DRAFT: 'bg-amber-400',
   MISSING: 'bg-rose-400',
-  FUTURE: 'bg-stone-200',
+  FUTURE: 'bg-slate-800',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -28,15 +28,15 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  RECONCILED: 'bg-emerald-100 text-emerald-700',
-  DRAFT: 'bg-amber-100 text-amber-700',
-  MISSING: 'bg-rose-100 text-rose-700',
+  RECONCILED: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
+  DRAFT: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
+  MISSING: 'bg-red-500/15 text-red-400 border border-red-500/30',
 };
 
 const STATUS_DOT: Record<string, string> = {
-  RECONCILED: 'bg-emerald-500',
+  RECONCILED: 'bg-emerald-400',
   DRAFT: 'bg-amber-400',
-  MISSING: 'bg-rose-400',
+  MISSING: 'bg-red-400',
 };
 
 function buildCalendarDays(trends: TrendDay[]): Array<{ date: string; status: string; gross_sales?: number; reconciled_at?: string }> {
@@ -68,6 +68,7 @@ function fmt(amount: number) {
 
 export default function DailyReportsListPage() {
   const router = useRouter();
+  const shouldReduce = useReducedMotion();
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
 
   const { data, isLoading, error } = useSWR('finance/daily-reports/trends', () =>
@@ -97,67 +98,59 @@ export default function DailyReportsListPage() {
     >
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Daily Sales Reports</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Last 30 days</p>
+          <h1 className="font-serif text-2xl text-slate-100">Daily Sales Reports</h1>
+          <p className="text-sm text-slate-400 mt-0.5 font-mono">Last 30 days</p>
         </div>
         <div className="flex items-center gap-2">
-          <motion.button
-            onClick={() => setView('calendar')}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              view === 'calendar' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-sm' : 'bg-white border border-gray-200/80 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            Calendar
-          </motion.button>
-          <motion.button
-            onClick={() => setView('list')}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              view === 'list' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-sm' : 'bg-white border border-gray-200/80 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            List
-          </motion.button>
+          {(['calendar', 'list'] as const).map(v => (
+            <motion.button
+              key={v}
+              onClick={() => setView(v)}
+              whileHover={shouldReduce ? {} : { scale: 1.02 }}
+              whileTap={shouldReduce ? {} : { scale: 0.97 }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${
+                view === v
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-sm'
+                  : 'bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+              }`}
+            >
+              {v}
+            </motion.button>
+          ))}
         </div>
       </div>
 
-      <div className="flex items-center gap-4 text-xs text-gray-500">
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-xs text-slate-500">
         {Object.entries({ RECONCILED: 'Reconciled', DRAFT: 'Draft', MISSING: 'Missing' }).map(([k, label]) => (
           <div key={k} className="flex items-center gap-1.5">
-            <span className={`inline-block w-3 h-3 rounded-sm ${STATUS_COLOR[k]}`} />
+            <span className={`inline-block w-2.5 h-2.5 rounded-sm ${STATUS_COLOR[k]}`} />
             {label}
           </div>
         ))}
         <div className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-sm bg-stone-200" />
+          <span className="inline-block w-2.5 h-2.5 rounded-sm bg-slate-800 border border-slate-700" />
           Future
         </div>
       </div>
 
+      {/* Loading skeleton */}
       {isLoading && (
-        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-6 space-y-3">
-          <div className="h-4 bg-gray-200 rounded w-1/4 animate-pulse" />
+        <div
+          className="rounded-xl p-6 space-y-3 animate-pulse"
+          style={{ background: 'rgba(14,18,35,0.95)', boxShadow: '0 0 0 1px rgba(30,41,59,0.8)' }}
+        >
+          <div className="h-4 bg-slate-800 rounded w-1/4" />
           <div className="grid grid-cols-7 gap-2">
             {Array.from({ length: 28 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-12 rounded-lg animate-pulse"
-                style={{
-                  background: `linear-gradient(90deg, #f3f4f6 25%, #e9eaec 50%, #f3f4f6 75%)`,
-                  backgroundSize: '200% 100%',
-                  animation: `pulse 1.5s ease-in-out ${i * 0.03}s infinite`,
-                }}
-              />
+              <div key={i} className="h-12 rounded-lg bg-slate-800 animate-pulse" />
             ))}
           </div>
         </div>
       )}
 
       {error && (
-        <p className="text-sm text-red-600">Failed to load data</p>
+        <p className="text-sm text-red-400">Failed to load data</p>
       )}
 
       <AnimatePresence mode="wait">
@@ -168,11 +161,12 @@ export default function DailyReportsListPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-5"
+            className="rounded-xl p-5"
+            style={{ background: 'rgba(14,18,35,0.95)', boxShadow: '0 0 0 1px rgba(30,41,59,0.8)' }}
           >
             <div className="grid grid-cols-7 gap-1 mb-2">
               {WEEK_DAYS.map(d => (
-                <div key={d} className="text-center text-xs font-medium text-gray-400 py-1">
+                <div key={d} className="text-center text-xs font-medium text-slate-600 py-1">
                   {d}
                 </div>
               ))}
@@ -193,13 +187,13 @@ export default function DailyReportsListPage() {
                         initial={{ opacity: 0, scale: 0.85 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: (wi * 7 + di) * 0.018, duration: 0.2, ease: 'easeOut' }}
-                        whileHover={clickable ? { scale: 1.05, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' } : {}}
-                        whileTap={clickable ? { scale: 0.97 } : {}}
+                        whileHover={clickable && !shouldReduce ? { scale: 1.05, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' } : {}}
+                        whileTap={clickable && !shouldReduce ? { scale: 0.97 } : {}}
                         className={`relative flex flex-col items-center justify-center rounded-lg p-1.5 min-h-[52px] transition-all ${
-                          clickable ? 'cursor-pointer' : 'cursor-default opacity-50'
-                        } ${STATUS_COLOR[day.status]} ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
+                          clickable ? 'cursor-pointer' : 'cursor-default opacity-40'
+                        } ${STATUS_COLOR[day.status]} ${isToday ? 'ring-2 ring-blue-400 ring-offset-1 ring-offset-slate-900' : ''}`}
                       >
-                        <span className={`text-xs font-bold ${day.status === 'FUTURE' ? 'text-stone-400' : 'text-white'}`}>
+                        <span className={`text-xs font-bold ${day.status === 'FUTURE' ? 'text-slate-500' : 'text-white'}`}>
                           {dayNum}
                         </span>
                         {day.gross_sales != null && (
@@ -223,28 +217,29 @@ export default function DailyReportsListPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden"
+            className="rounded-xl overflow-hidden"
+            style={{ background: 'rgba(14,18,35,0.95)', boxShadow: '0 0 0 1px rgba(30,41,59,0.8)' }}
           >
             <table className="w-full text-sm">
-              <thead className="bg-gray-50/80 backdrop-blur-sm border-b sticky top-0 z-10">
+              <thead className="border-b border-slate-800 sticky top-0 z-10" style={{ background: 'rgba(10,12,25,0.95)' }}>
                 <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Gross Sales</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Reconciled At</th>
+                  <th className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Date</th>
+                  <th className="text-right px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Gross Sales</th>
+                  <th className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Status</th>
+                  <th className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Reconciled At</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-800/60">
                 {listDays.map((day, index) => (
                   <motion.tr
                     key={day.date}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.035, duration: 0.2 }}
-                    className="group hover:bg-blue-50/40 transition-colors border-l-2 border-l-transparent hover:border-l-blue-500"
+                    className="group hover:bg-slate-800/40 transition-colors border-l-2 border-l-transparent hover:border-l-blue-500"
                   >
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                    <td className="px-4 py-3 font-medium text-slate-200">
                       {new Date(day.date + 'T00:00:00').toLocaleDateString('en-IN', {
                         weekday: 'short',
                         day: 'numeric',
@@ -252,16 +247,16 @@ export default function DailyReportsListPage() {
                         year: 'numeric',
                       })}
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums text-gray-900">
+                    <td className="px-4 py-3 text-right font-semibold tabular-nums font-mono text-slate-100">
                       {day.gross_sales != null ? `₹${fmt(day.gross_sales)}` : '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[day.status] ?? 'bg-gray-100 text-gray-500'}`}>
-                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${STATUS_DOT[day.status] ?? 'bg-gray-400'}`} />
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[day.status] ?? 'bg-slate-700/50 text-slate-400 border border-slate-700'}`}>
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${STATUS_DOT[day.status] ?? 'bg-slate-500'}`} />
                         {STATUS_LABEL[day.status] ?? day.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-4 py-3 text-slate-500 font-mono text-xs">
                       {day.reconciled_at
                         ? new Date(day.reconciled_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
                         : '—'}
@@ -271,7 +266,7 @@ export default function DailyReportsListPage() {
                         onClick={() => router.push(`/finance/daily-reports/${day.date}`)}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                        className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
                       >
                         View →
                       </motion.button>
@@ -281,12 +276,12 @@ export default function DailyReportsListPage() {
               </tbody>
             </table>
             {listDays.length === 0 && (
-              <div className="py-16 flex flex-col items-center gap-3 text-gray-400">
+              <div className="py-16 flex flex-col items-center gap-3 text-slate-500">
                 <svg className="w-10 h-10 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                <p className="font-medium text-sm">No reports found</p>
-                <p className="text-xs">Try adjusting your filters or check back later</p>
+                <p className="font-medium text-sm text-slate-400">No reports found</p>
+                <p className="text-xs text-slate-600">Try adjusting your filters or check back later</p>
               </div>
             )}
           </motion.div>

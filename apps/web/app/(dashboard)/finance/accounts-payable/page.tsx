@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR, { mutate } from 'swr';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { financeApi } from '@/lib/api/finance.api';
 import {
@@ -51,43 +51,73 @@ const EMPTY_PAYMENT: PaymentForm = {
 
 const PAYMENT_METHODS = ['cash', 'card', 'upi', 'bank_transfer'] as const;
 
-const inputClass =
-  'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white';
+const darkInputClass =
+  'w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60 transition-colors';
 
 function fmt(n: number) {
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 }
 
+type SummaryStatus = 'good' | 'warning' | 'danger' | 'neutral';
+
+const STATUS_GLOW: Record<SummaryStatus, string> = {
+  good: '0 0 0 1px rgba(34,197,94,0.3), 0 0 16px rgba(34,197,94,0.08)',
+  warning: '0 0 0 1px rgba(245,158,11,0.35), 0 0 16px rgba(245,158,11,0.1)',
+  danger: '0 0 0 1px rgba(239,68,68,0.4), 0 0 20px rgba(239,68,68,0.12)',
+  neutral: '0 0 0 1px rgba(30,41,59,0.8)',
+};
+
+const STATUS_VALUE_COLOR: Record<SummaryStatus, string> = {
+  good: 'text-emerald-300',
+  warning: 'text-amber-300',
+  danger: 'text-red-300',
+  neutral: 'text-slate-100',
+};
+
 function SummaryCard({
   label,
   value,
-  colorClass,
+  status = 'neutral',
   index,
 }: {
   label: string;
   value: number;
-  colorClass?: string;
+  status?: SummaryStatus;
   index: number;
 }) {
+  const shouldReduce = useReducedMotion();
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.08, duration: 0.25, ease: 'easeOut' }}
-      className={`bg-white rounded-xl border border-gray-200/80 shadow-sm border-l-4 ${colorClass ?? 'border-l-gray-200'} p-5`}
+      whileHover={shouldReduce ? {} : { y: -2, transition: { duration: 0.15 } }}
+      className="relative overflow-hidden rounded-xl p-5 cursor-default"
+      style={{ background: 'rgba(14,18,35,0.95)', boxShadow: STATUS_GLOW[status] }}
     >
-      <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
-      <p className="text-2xl font-bold tabular-nums text-gray-900 mt-1">{fmt(value)}</p>
+      {/* Ledger texture */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.025]"
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(0deg, #94a3b8 0px, #94a3b8 1px, transparent 1px, transparent 24px)',
+        }}
+      />
+      <p className="text-[10px] font-semibold tracking-[0.15em] text-slate-500 uppercase mb-1.5">{label}</p>
+      <p className={`font-mono text-2xl font-bold tabular-nums leading-none ${STATUS_VALUE_COLOR[status]}`}>
+        {fmt(value)}
+      </p>
     </motion.div>
   );
 }
 
 function AgingCell({ amount }: { amount: number }) {
-  if (amount === 0) return <td className="px-4 py-3 text-right text-gray-300 text-sm">—</td>;
-  return <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-gray-800">{fmt(amount)}</td>;
+  if (amount === 0) return <td className="px-4 py-3 text-right text-slate-700 text-sm font-mono">—</td>;
+  return <td className="px-4 py-3 text-right text-sm font-medium tabular-nums font-mono text-slate-200">{fmt(amount)}</td>;
 }
 
 export default function AccountsPayablePage() {
+  const shouldReduce = useReducedMotion();
   const [paymentDialog, setPaymentDialog] = useState<{ open: boolean; vendorId: string; vendorName: string }>({
     open: false,
     vendorId: '',
@@ -148,6 +178,11 @@ export default function AccountsPayablePage() {
   const isLoading = summaryLoading || agingLoading;
   const hasError = summaryError || agingError;
 
+  // Derive status for summary cards
+  const outstandingStatus: SummaryStatus = summary.total_outstanding > 100000 ? 'danger' : summary.total_outstanding > 50000 ? 'warning' : 'good';
+  const overdueStatus: SummaryStatus = summary.total_overdue > 0 ? 'danger' : 'good';
+  const dueThisWeekStatus: SummaryStatus = summary.due_this_week > 25000 ? 'warning' : 'neutral';
+
   return (
     <RoleGuard allowedRoles={['owner']}>
     <motion.div
@@ -157,91 +192,84 @@ export default function AccountsPayablePage() {
       transition={{ duration: 0.25, ease: 'easeOut' }}
     >
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Accounts Payable</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Vendor aging and payment tracking</p>
+        <h1 className="font-serif text-2xl text-slate-100">Accounts Payable</h1>
+        <p className="text-sm text-slate-400 mt-0.5">Vendor aging and payment tracking</p>
       </div>
 
+      {/* Loading skeleton */}
       {isLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-200/80 shadow-sm border-l-4 border-l-gray-200 p-5 animate-pulse">
-              <div className="h-3 bg-gray-200 rounded w-1/2 mb-3" />
-              <div className="h-7 bg-gray-200 rounded w-3/4" />
+            <div
+              key={i}
+              className="rounded-xl p-5 animate-pulse"
+              style={{ background: 'rgba(14,18,35,0.9)', boxShadow: '0 0 0 1px rgba(30,41,59,0.8)' }}
+            >
+              <div className="h-3 bg-slate-800 rounded w-1/2 mb-3" />
+              <div className="h-7 bg-slate-800 rounded w-3/4" />
             </div>
           ))}
         </div>
       )}
 
-      {hasError && <p className="text-sm text-red-600">Failed to load data</p>}
+      {hasError && <p className="text-sm text-red-400">Failed to load data</p>}
 
       {!isLoading && !hasError && (
         <>
+          {/* Summary cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <SummaryCard
-              index={0}
-              label="Total Outstanding"
-              value={summary.total_outstanding}
-              colorClass={summary.total_outstanding > 100000 ? 'border-l-red-400' : summary.total_outstanding > 50000 ? 'border-l-amber-400' : 'border-l-emerald-400'}
-            />
-            <SummaryCard
-              index={1}
-              label="Overdue"
-              value={summary.total_overdue}
-              colorClass={summary.total_overdue > 0 ? 'border-l-red-400' : 'border-l-emerald-400'}
-            />
-            <SummaryCard
-              index={2}
-              label="Due This Week"
-              value={summary.due_this_week}
-              colorClass={summary.due_this_week > 25000 ? 'border-l-amber-400' : 'border-l-gray-200'}
-            />
+            <SummaryCard index={0} label="Total Outstanding" value={summary.total_outstanding} status={outstandingStatus} />
+            <SummaryCard index={1} label="Overdue" value={summary.total_overdue} status={overdueStatus} />
+            <SummaryCard index={2} label="Due This Week" value={summary.due_this_week} status={dueThisWeekStatus} />
           </div>
 
+          {/* Aging table */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.28, duration: 0.25 }}
-            className="bg-white rounded-xl border border-gray-200/80 shadow-sm overflow-hidden"
+            className="rounded-xl overflow-hidden"
+            style={{ background: 'rgba(14,18,35,0.95)', boxShadow: '0 0 0 1px rgba(30,41,59,0.8)' }}
           >
-            <div className="px-4 py-3 border-b bg-gray-50/80">
-              <h2 className="text-sm font-semibold text-gray-700">AP Aging Detail</h2>
+            <div className="px-4 py-3 border-b border-slate-800/80 flex items-center">
+              <h2 className="text-sm font-semibold text-slate-300">AP Aging Detail</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50/80 backdrop-blur-sm border-b sticky top-0 z-10">
+                <thead className="border-b border-slate-800 sticky top-0 z-10" style={{ background: 'rgba(10,12,25,0.95)' }}>
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Vendor</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Current (0–30d)</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">31–60d</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">61–90d</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">90d+</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Vendor</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Current (0–30d)</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">31–60d</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">61–90d</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">90d+</th>
+                    <th className="text-right px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Total</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-800/60">
                   {agingRows.map((row, index) => (
                     <motion.tr
                       key={row.vendor_id}
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.3 + index * 0.04, duration: 0.2 }}
-                      className="group hover:bg-blue-50/40 transition-colors border-l-2 border-l-transparent hover:border-l-blue-500"
+                      className="group hover:bg-slate-800/40 transition-colors border-l-2 border-l-transparent hover:border-l-blue-500"
                     >
-                      <td className="px-4 py-3 font-medium text-gray-900">{row.vendor_name}</td>
+                      <td className="px-4 py-3 font-medium text-slate-200">{row.vendor_name}</td>
                       <AgingCell amount={row.current} />
                       <AgingCell amount={row.days_31_60} />
                       <AgingCell amount={row.days_61_90} />
-                      <td className={`px-4 py-3 text-right text-sm font-medium tabular-nums ${row.days_90_plus > 0 ? 'text-red-600' : 'text-gray-300'}`}>
+                      <td className={`px-4 py-3 text-right text-sm font-medium tabular-nums font-mono ${row.days_90_plus > 0 ? 'text-red-400' : 'text-slate-700'}`}>
                         {row.days_90_plus > 0 ? fmt(row.days_90_plus) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums text-gray-900">{fmt(row.total)}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums font-mono text-slate-100">{fmt(row.total)}</td>
                       <td className="px-4 py-3 text-right">
                         <motion.button
                           onClick={() => openPayment(row.vendor_id, row.vendor_name)}
-                          whileHover={{ scale: 1.03 }}
-                          whileTap={{ scale: 0.97 }}
-                          className="px-3 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors font-medium"
+                          whileHover={shouldReduce ? {} : { scale: 1.03 }}
+                          whileTap={shouldReduce ? {} : { scale: 0.97 }}
+                          className="px-3 py-1 text-xs bg-blue-500/15 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-500/25 hover:text-blue-300 transition-colors font-medium"
                         >
                           Record Payment
                         </motion.button>
@@ -250,22 +278,22 @@ export default function AccountsPayablePage() {
                   ))}
                 </tbody>
                 {agingRows.length > 0 && (
-                  <tfoot className="border-t bg-gray-50">
+                  <tfoot className="border-t border-slate-800" style={{ background: 'rgba(10,12,25,0.6)' }}>
                     <tr>
-                      <td className="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Totals</td>
-                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums text-gray-800">
+                      <td className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Totals</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums font-mono text-slate-300">
                         {fmt(agingRows.reduce((s, r) => s + r.current, 0))}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums text-gray-800">
+                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums font-mono text-slate-300">
                         {fmt(agingRows.reduce((s, r) => s + r.days_31_60, 0))}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums text-gray-800">
+                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums font-mono text-slate-300">
                         {fmt(agingRows.reduce((s, r) => s + r.days_61_90, 0))}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums text-red-600">
+                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums font-mono text-red-400">
                         {fmt(agingRows.reduce((s, r) => s + r.days_90_plus, 0))}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums text-gray-900">
+                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums font-mono text-slate-100">
                         {fmt(agingRows.reduce((s, r) => s + r.total, 0))}
                       </td>
                       <td />
@@ -274,12 +302,12 @@ export default function AccountsPayablePage() {
                 )}
               </table>
               {agingRows.length === 0 && (
-                <div className="py-16 flex flex-col items-center gap-3 text-gray-400">
+                <div className="py-16 flex flex-col items-center gap-3 text-slate-500">
                   <svg className="w-10 h-10 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <p className="font-medium text-sm">No outstanding payables</p>
-                  <p className="text-xs">All vendors are fully paid up</p>
+                  <p className="font-medium text-sm text-slate-400">No outstanding payables</p>
+                  <p className="text-xs text-slate-600">All vendors are fully paid up</p>
                 </div>
               )}
             </div>
@@ -287,13 +315,14 @@ export default function AccountsPayablePage() {
         </>
       )}
 
+      {/* Payment dialog */}
       <AnimatePresence>
         {paymentDialog.open && (
           <Dialog
             open={paymentDialog.open}
             onOpenChange={(open: boolean) => setPaymentDialog(d => ({ ...d, open }))}
           >
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-md bg-slate-900 border-slate-800 text-slate-100">
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -301,11 +330,11 @@ export default function AccountsPayablePage() {
                 transition={{ duration: 0.2 }}
               >
                 <DialogHeader>
-                  <DialogTitle>Record Payment — {paymentDialog.vendorName}</DialogTitle>
+                  <DialogTitle className="font-serif text-slate-100">Record Payment — {paymentDialog.vendorName}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 mt-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹) *</label>
+                    <label className="block text-xs font-semibold tracking-wide text-slate-400 uppercase mb-1.5">Amount (₹) *</label>
                     <input
                       type="number"
                       value={paymentForm.amount}
@@ -313,27 +342,27 @@ export default function AccountsPayablePage() {
                       placeholder="0.00"
                       min="0"
                       step="0.01"
-                      className={inputClass}
+                      className={darkInputClass}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date *</label>
+                    <label className="block text-xs font-semibold tracking-wide text-slate-400 uppercase mb-1.5">Payment Date *</label>
                     <input
                       type="date"
                       value={paymentForm.date}
                       onChange={e => setForm('date')(e.target.value)}
-                      className={inputClass}
+                      className={darkInputClass}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                    <label className="block text-xs font-semibold tracking-wide text-slate-400 uppercase mb-1.5">Payment Method</label>
                     <Select value={paymentForm.payment_method} onValueChange={setForm('payment_method')}>
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full bg-slate-800 border-slate-700 text-slate-100 focus:ring-blue-500/40 focus:border-blue-500/60">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-slate-900 border-slate-700 text-slate-100">
                         {PAYMENT_METHODS.map(m => (
-                          <SelectItem key={m} value={m}>
+                          <SelectItem key={m} value={m} className="focus:bg-slate-800">
                             {m === 'bank_transfer' ? 'Bank Transfer' : m.charAt(0).toUpperCase() + m.slice(1)}
                           </SelectItem>
                         ))}
@@ -341,19 +370,19 @@ export default function AccountsPayablePage() {
                     </Select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <label className="block text-xs font-semibold tracking-wide text-slate-400 uppercase mb-1.5">Notes</label>
                     <textarea
                       value={paymentForm.notes}
                       onChange={e => setForm('notes')(e.target.value)}
                       rows={2}
                       placeholder="Reference number, remarks…"
-                      className={`${inputClass} resize-none`}
+                      className={`${darkInputClass} resize-none`}
                     />
                   </div>
                   <AnimatePresence>
                     {payError && (
                       <motion.p
-                        className="text-sm text-red-600"
+                        className="text-sm text-red-400"
                         initial={{ opacity: 0, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -4 }}
@@ -367,17 +396,17 @@ export default function AccountsPayablePage() {
                     <motion.button
                       onClick={handlePayment}
                       disabled={paying}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.97 }}
-                      className="flex-1 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-shadow disabled:opacity-50"
+                      whileHover={shouldReduce ? {} : { scale: 1.02 }}
+                      whileTap={shouldReduce ? {} : { scale: 0.97 }}
+                      className="flex-1 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50"
                     >
                       {paying ? 'Recording…' : 'Record Payment'}
                     </motion.button>
                     <motion.button
                       onClick={() => setPaymentDialog(d => ({ ...d, open: false }))}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.97 }}
-                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                      whileHover={shouldReduce ? {} : { scale: 1.02 }}
+                      whileTap={shouldReduce ? {} : { scale: 0.97 }}
+                      className="px-4 py-2 border border-slate-700 rounded-lg text-sm text-slate-400 hover:text-slate-200 hover:border-slate-600 transition-colors"
                     >
                       Cancel
                     </motion.button>

@@ -52,27 +52,36 @@ function ReconciledSummary({ data, date }: { data: DSRData; date: string }) {
       className="space-y-4"
     >
       {/* Status Banner */}
-      <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+      <div
+        className="rounded-xl p-4 flex items-center gap-3"
+        style={{
+          background: 'rgba(16,40,24,0.6)',
+          boxShadow: '0 0 0 1px rgba(34,197,94,0.25)',
+        }}
+      >
         <span className="text-2xl">✅</span>
         <div>
-          <p className="font-semibold text-green-800">Report Reconciled</p>
-          <p className="text-sm text-green-600">Daily sales report for {date} is finalised.</p>
+          <p className="font-semibold text-emerald-300">Report Reconciled</p>
+          <p className="text-sm text-emerald-500/80">Daily sales report for {date} is finalised.</p>
         </div>
       </div>
 
       {/* Summary Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{ background: 'rgba(14,18,35,0.95)', boxShadow: '0 0 0 1px rgba(30,41,59,0.8)' }}
+      >
         <table className="w-full text-sm">
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-800/60">
             {rows.map(row => (
               <tr
                 key={row.label}
-                className={row.highlight ? 'bg-blue-50' : ''}
+                className={row.highlight ? 'bg-blue-500/10' : ''}
               >
-                <td className="px-5 py-3 text-gray-500">{row.label}</td>
+                <td className="px-5 py-3 text-slate-400">{row.label}</td>
                 <td
-                  className={`px-5 py-3 text-right font-semibold tabular-nums ${
-                    row.highlight ? 'text-blue-800' : 'text-gray-900'
+                  className={`px-5 py-3 text-right font-semibold tabular-nums font-mono ${
+                    row.highlight ? 'text-blue-300' : 'text-slate-100'
                   }`}
                 >
                   {row.value}
@@ -84,9 +93,15 @@ function ReconciledSummary({ data, date }: { data: DSRData; date: string }) {
       </div>
 
       {data.variance_explanation && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <p className="text-xs font-semibold text-amber-700 mb-1">Variance Explanation</p>
-          <p className="text-sm text-amber-800">{data.variance_explanation}</p>
+        <div
+          className="rounded-xl p-4"
+          style={{
+            background: 'rgba(40,30,10,0.5)',
+            boxShadow: '0 0 0 1px rgba(245,158,11,0.25)',
+          }}
+        >
+          <p className="text-xs font-semibold text-amber-400 mb-1">Variance Explanation</p>
+          <p className="text-sm text-amber-300/80">{data.variance_explanation}</p>
         </div>
       )}
     </motion.div>
@@ -114,7 +129,6 @@ export default function DSRPage() {
         setIsReconciled(d?.status === 'RECONCILED');
       })
       .catch(() => {
-        // 404 = no report yet — show wizard in empty state
         setReportData(null);
         setIsReconciled(false);
       })
@@ -123,7 +137,6 @@ export default function DSRPage() {
 
   const handleComplete = () => {
     router.refresh();
-    // Re-fetch to show reconciled view
     financeApi.dailyReports
       .get(date)
       .then(res => {
@@ -140,15 +153,15 @@ export default function DSRPage() {
       <div className="flex items-center gap-3">
         <Link
           href="/finance/daily-reports"
-          className="text-gray-400 hover:text-gray-700 transition-colors"
+          className="text-slate-500 hover:text-slate-300 transition-colors"
           aria-label="Back to daily reports"
         >
           ←
         </Link>
         <div className="flex-1 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Daily Sales Report</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <h1 className="font-serif text-2xl text-slate-100">Daily Sales Report</h1>
+            <p className="text-sm text-slate-400 mt-0.5 font-mono">
               {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', {
                 weekday: 'long',
                 day: 'numeric',
@@ -160,8 +173,8 @@ export default function DSRPage() {
           <span
             className={`text-xs font-semibold px-3 py-1 rounded-full border ${
               isReconciled
-                ? 'bg-green-100 text-green-700 border-green-200'
-                : 'bg-amber-100 text-amber-700 border-amber-200'
+                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
             }`}
           >
             {isReconciled ? 'Reconciled' : 'Draft'}
@@ -171,14 +184,17 @@ export default function DSRPage() {
 
       {/* Loading skeleton */}
       {loading && (
-        <div className="bg-white rounded-xl border p-6 space-y-4 animate-pulse">
+        <div
+          className="rounded-xl p-6 space-y-4 animate-pulse"
+          style={{ background: 'rgba(14,18,35,0.95)', boxShadow: '0 0 0 1px rgba(30,41,59,0.8)' }}
+        >
           <div className="flex gap-2">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="flex-1 h-8 bg-gray-200 rounded-full" />
+              <div key={i} className="flex-1 h-8 bg-slate-800 rounded-full" />
             ))}
           </div>
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-10 bg-gray-100 rounded-lg" />
+            <div key={i} className="h-10 bg-slate-800/60 rounded-lg" />
           ))}
         </div>
       )}
