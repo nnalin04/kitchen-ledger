@@ -1,27 +1,14 @@
-# ── Stage 1: Build ────────────────────────────────────────────
-FROM maven:3.9-eclipse-temurin-21 AS builder
+FROM maven:3.9-eclipse-temurin-21-alpine AS build
 WORKDIR /app
-
 COPY pom.xml .
 RUN mvn dependency:go-offline -q
-
 COPY src ./src
 RUN mvn package -DskipTests -q
 
-# ── Stage 2: Runtime ──────────────────────────────────────────
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre-alpine AS runtime
+RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
-
-RUN addgroup -S klgroup && adduser -S kluser -G klgroup
-
-COPY --from=builder /app/target/*.jar app.jar
-
-RUN chown kluser:klgroup app.jar
-USER kluser
-
-EXPOSE 8083
-
-ENTRYPOINT ["java", \
-  "-XX:+UseContainerSupport", \
-  "-XX:MaxRAMPercentage=75.0", \
-  "-jar", "app.jar"]
+COPY --from=build /app/target/*.jar app.jar
+USER app
+HEALTHCHECK --interval=30s --timeout=5s CMD wget -q --spider http://localhost:8083/actuator/health || exit 1
+ENTRYPOINT ["java", "-jar", "app.jar"]

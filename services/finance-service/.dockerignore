@@ -1,23 +1,7 @@
-# Dev/test artifacts
-target/
-*.class
-*.jar
-*.war
-
-# Environment
 .env
-.env.*
-!.env.example
-
-# IDE
-.idea/
-*.iml
-.vscode/
-
-# Tests and CI artifacts
-**/surefire-reports/
-**/failsafe-reports/
-
-# OS
-.DS_Store
-Thumbs.db
+target/
+node_modules/
+__pycache__/
+*.test.ts
+coverage/
+dist/

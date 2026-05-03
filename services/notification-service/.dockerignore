@@ -1,10 +1,7 @@
-node_modules/
 .env
-.env.*
-!.env.example
-*.log
-dist/
+target/
+node_modules/
+__pycache__/
+*.test.ts
 coverage/
-.DS_Store
-Thumbs.db
-.vscode/
+dist/

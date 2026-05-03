@@ -1,34 +1,18 @@
-name: Deploy to Cloud Run
+name: Deploy
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Target environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options: [staging, production]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: asia-south1
+  REGISTRY: asia-south1-docker.pkg.dev
 
 jobs:
-  # ── Step 1: Run tests (gate before deploy) ────────────────────────────────
-  gate:
-    name: Test gate
-    uses: ./.github/workflows/ci.yml
-
-  # ── Step 2: Build and push all Docker images to Artifact Registry ─────────
-  build:
-    name: Build ${{ matrix.service }}
-    needs: gate
+  build-and-push:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write  # Workload Identity Federation
-
     strategy:
-      fail-fast: false
       matrix:
         service:
           - auth-service
@@ -40,132 +24,40 @@ jobs:
           - gateway
           - notification-service
           - file-service
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Authenticate to GCP
+      - id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-
-      - uses: docker/setup-buildx-action@v3
-
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker ${{ env.REGISTRY }}
       - name: Build and push ${{ matrix.service }}
-        uses: docker/build-push-action@v5
-        with:
-          context: services/${{ matrix.service }}
-          push: true
-          tags: |
-            us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/kitchenledger/${{ matrix.service }}:${{ github.sha }}
-          cache-from: type=registry,ref=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/kitchenledger/${{ matrix.service }}:cache
-          cache-to: type=registry,ref=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/kitchenledger/${{ matrix.service }}:cache,mode=max
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/kitchenledger/${{ matrix.service }}:${{ github.sha }} \
+            services/${{ matrix.service }}
+          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/kitchenledger/${{ matrix.service }}:${{ github.sha }}
 
-  # ── Step 3: Run Alembic migrations before container rollout ───────────────
-  migrate:
-    name: Run migrations
-    needs: build
-    uses: ./.github/workflows/migrate.yml
-    with:
-      environment: ${{ github.event.inputs.environment || 'staging' }}
-    secrets:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-  # ── Step 4: Deploy to Cloud Run ───────────────────────────────────────────
   deploy:
-    name: Deploy to ${{ github.event.inputs.environment || 'staging' }}
-    needs: migrate
+    needs: build-and-push
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'staging' }}
-    permissions:
-      contents: read
-      id-token: write
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Authenticate to GCP
+      - id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Install gcloud components
-        run: gcloud components install beta --quiet
-
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
       - name: Deploy all services
-        env:
-          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
-          GCP_REGION: us-central1
-          GCP_VPC_CONNECTOR: kitchenledger-connector
         run: |
-          bash infrastructure/gcp/deploy.sh \
-            --env "${{ github.event.inputs.environment || 'staging' }}" \
-            --tag "${{ github.sha }}"
-
-  # ── Step 5: Post-deploy smoke test ────────────────────────────────────────
-  smoke:
-    name: Smoke test
-    needs: deploy
-    runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'staging' }}
-    permissions:
-      id-token: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Get gateway URL
-        id: gateway
-        run: |
-          ENV="${{ github.event.inputs.environment || 'staging' }}"
-          URL=$(gcloud run services describe "gateway-${ENV}" \
-            --region=us-central1 \
-            --format='value(status.url)')
-          echo "url=${URL}" >> $GITHUB_OUTPUT
-
-      - name: Health check all services
-        run: |
-          URL="${{ steps.gateway.outputs.url }}"
-          echo "Checking gateway health at ${URL}/health..."
-
-          for attempt in {1..10}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${URL}/health" --max-time 5 || echo "000")
-            if [[ "$STATUS" == "200" ]]; then
-              echo "✓ Gateway healthy"
-              exit 0
-            fi
-            echo "Attempt ${attempt}/10: got ${STATUS}, retrying in 5s..."
-            sleep 5
+          for service in auth-service inventory-service finance-service staff-service ai-service report-service gateway notification-service file-service; do
+            gcloud run deploy $service \
+              --image ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/kitchenledger/$service:${{ github.sha }} \
+              --region ${{ env.REGION }} \
+              --no-allow-unauthenticated \
+              --platform managed \
+              --quiet
           done
-
-          echo "✗ Gateway did not become healthy in time"
-          exit 1
-
-  # ── Notify on failure ─────────────────────────────────────────────────────
-  notify-failure:
-    name: Notify on failure
-    needs: [build, migrate, deploy, smoke]
-    if: failure()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Send Slack alert
-        uses: slackapi/slack-github-action@v1
-        with:
-          payload: |
-            {
-              "text": "🚨 KitchenLedger deploy FAILED on `${{ github.ref_name }}` (sha: `${{ github.sha }}`)\nWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+      - name: Smoke test
+        run: |
+          GATEWAY_URL=$(gcloud run services describe gateway --region ${{ env.REGION }} --format 'value(status.url)')
+          curl -f "$GATEWAY_URL/health" || exit 1
