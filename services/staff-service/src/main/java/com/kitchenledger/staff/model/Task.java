@@ -50,6 +50,13 @@ public class Task {
     @Builder.Default
     private boolean recurring = false;
 
+    @Column(name = "requires_photo", nullable = false)
+    @Builder.Default
+    private boolean requiresPhoto = false;
+
+    @Column(name = "category")
+    private String category;
+
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 

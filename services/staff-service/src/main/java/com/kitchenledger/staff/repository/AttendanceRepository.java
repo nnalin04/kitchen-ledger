@@ -61,4 +61,17 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             @Param("employeeId") UUID employeeId,
             @Param("from") Instant from,
             @Param("to") Instant to);
+
+    @Query("""
+        SELECT a.employeeId, COALESCE(SUM(a.hoursWorked), 0)
+        FROM Attendance a
+        WHERE a.tenantId = :tenantId
+          AND a.clockInAt >= :from AND a.clockInAt < :to
+          AND a.hoursWorked IS NOT NULL
+        GROUP BY a.employeeId
+        """)
+    List<Object[]> sumHoursWorkedPerEmployee(
+            @Param("tenantId") UUID tenantId,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
 }

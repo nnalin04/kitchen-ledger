@@ -38,8 +38,12 @@ def upgrade() -> None:
 
         ALTER TABLE report_jobs ENABLE ROW LEVEL SECURITY;
 
-        CREATE POLICY IF NOT EXISTS tenant_isolation ON report_jobs
-            USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::UUID);
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'report_jobs' AND policyname = 'tenant_isolation') THEN
+            CREATE POLICY tenant_isolation ON report_jobs
+                USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::UUID);
+          END IF;
+        END $$;
 
         CREATE INDEX IF NOT EXISTS idx_report_jobs_tenant
             ON report_jobs (tenant_id, created_at DESC);

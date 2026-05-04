@@ -28,8 +28,8 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
         WHERE i.tenantId = :tenantId
           AND i.deletedAt IS NULL
           AND (:search IS NULL
-               OR LOWER(i.name) LIKE LOWER(CONCAT('%', :search, '%'))
-               OR i.sku LIKE CONCAT('%', :search, '%'))
+               OR LOWER(i.name) LIKE :search
+               OR LOWER(i.sku) LIKE :search)
           AND (:abcCategory IS NULL OR CAST(i.abcCategory AS string) = :abcCategory)
           AND (:lowStockOnly = false OR (i.parLevel IS NOT NULL AND i.currentStock < i.parLevel))
         """)

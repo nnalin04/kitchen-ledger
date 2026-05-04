@@ -1,3 +1,4 @@
+import subprocess
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -18,13 +19,21 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start background consumers on startup; clean up on shutdown."""
+    """Run DB migrations, start background consumers on startup; clean up on shutdown."""
+    try:
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            capture_output=True, text=True, check=True
+        )
+        logger.info("Alembic migrations applied: %s", result.stdout.strip() or "up to date")
+    except subprocess.CalledProcessError as e:
+        logger.error("Alembic migration failed: %s", e.stderr)
+        raise
     try:
         from app.consumers.dsr_reconciled import start_consumer_thread
         start_consumer_thread()
         logger.info("lifespan: dsr_reconciled consumer thread started")
     except Exception as exc:
-        # Consumer failure must not block the API from starting
         logger.warning("lifespan: could not start dsr_reconciled consumer: %s", exc)
     yield
     # Shutdown: daemon thread exits automatically with the process

@@ -100,7 +100,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       PORT: 8080
       AUTH_SERVICE_URL: http://auth-service:8081
       INVENTORY_SERVICE_URL: http://inventory-service:8082
@@ -120,7 +120,7 @@ services:
       rabbitmq-setup:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ready || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ready || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -145,6 +145,7 @@ services:
       JWT_ACCESS_TOKEN_EXPIRY_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRY_MINUTES:-15}
       JWT_REFRESH_TOKEN_EXPIRY_DAYS: ${JWT_REFRESH_TOKEN_EXPIRY_DAYS:-30}
       RESEND_API_KEY: ${RESEND_API_KEY}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -269,7 +270,7 @@ services:
       rabbitmq-setup:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/ready || exit 1"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8084/ready')\" || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -312,7 +313,7 @@ services:
       context: ../services/notification-service
       dockerfile: Dockerfile
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       PORT: 8086
       DATABASE_URL: postgresql://${POSTGRES_USER:-kl_user}:${POSTGRES_PASSWORD:-kl_password}@postgres:5432/kitchenledger
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-kl_rabbit}:${RABBITMQ_PASSWORD:-kl_rabbit_pass}@rabbitmq:5672
@@ -325,7 +326,7 @@ services:
       rabbitmq-setup:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8086/ready || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8086/ready || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -356,7 +357,7 @@ services:
       rabbitmq-setup:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8087/ready || exit 1"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8087/ready')\" || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -372,15 +373,16 @@ services:
       context: ../services/file-service
       dockerfile: Dockerfile
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       PORT: 8085
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kl_user}:${POSTGRES_PASSWORD:-kl_password}@postgres:5432/kitchenledger
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
       SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-kitchenledger-files}
       MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-10}
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8085/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5

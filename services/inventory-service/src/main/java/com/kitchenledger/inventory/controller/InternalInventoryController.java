@@ -6,9 +6,11 @@ import com.kitchenledger.inventory.dto.response.WasteLogResponse;
 import com.kitchenledger.inventory.exception.AccessDeniedException;
 import com.kitchenledger.inventory.model.InventoryCountItem;
 import com.kitchenledger.inventory.model.InventoryItem;
+import com.kitchenledger.inventory.model.InventoryMovement;
 import com.kitchenledger.inventory.model.WasteLog;
 import com.kitchenledger.inventory.repository.InventoryCountItemRepository;
 import com.kitchenledger.inventory.repository.InventoryItemRepository;
+import com.kitchenledger.inventory.repository.InventoryMovementRepository;
 import com.kitchenledger.inventory.repository.RecipeRepository;
 import com.kitchenledger.inventory.repository.WasteLogRepository;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,7 @@ import java.util.stream.Collectors;
 public class InternalInventoryController {
 
     private final InventoryItemRepository itemRepository;
+    private final InventoryMovementRepository movementRepository;
     private final WasteLogRepository wasteLogRepository;
     private final RecipeRepository recipeRepository;
     private final InventoryCountItemRepository countItemRepository;
@@ -218,6 +221,34 @@ public class InternalInventoryController {
                 .findByTenantIdAndNameInIgnoreCaseAndDeletedAtIsNull(tenantId, lowerNames)
                 .stream().map(InventoryItemResponse::from).toList();
         return ResponseEntity.ok(items);
+    }
+
+    /**
+     * Movement history for an item — consumed by AI Service for demand forecasting.
+     * Returns movements for the last {@code days} days (default 56 = 8 weeks).
+     */
+    @GetMapping("/items/{id}/movements")
+    public ResponseEntity<List<Map<String, Object>>> getItemMovements(
+            @RequestHeader("x-internal-secret") String secret,
+            @PathVariable UUID id,
+            @RequestParam UUID tenantId,
+            @RequestParam(defaultValue = "56") int days) {
+        verifySecret(secret);
+        Instant since = Instant.now().minusSeconds((long) days * 86400);
+        List<Map<String, Object>> movements = movementRepository
+                .findByTenantIdAndInventoryItemIdAndCreatedAtAfterOrderByCreatedAtDesc(tenantId, id, since)
+                .stream()
+                .map(m -> Map.<String, Object>of(
+                        "id",             m.getId(),
+                        "movement_type",  m.getMovementType().name(),
+                        "quantity_delta", m.getQuantityDelta(),
+                        "unit",           m.getUnit() != null ? m.getUnit() : "",
+                        "unit_cost",      m.getUnitCost() != null ? m.getUnitCost() : BigDecimal.ZERO,
+                        "reference_type", m.getReferenceType() != null ? m.getReferenceType() : "",
+                        "created_at",     m.getCreatedAt() != null ? m.getCreatedAt().toString() : ""
+                ))
+                .toList();
+        return ResponseEntity.ok(movements);
     }
 
     /**

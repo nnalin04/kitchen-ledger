@@ -1,3 +1,5 @@
+import subprocess
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -12,11 +14,27 @@ logger = get_logger(__name__)
 # Routers import from app.core.exceptions (not from app.main).
 from app.routers import ocr, voice, jobs, query, forecast  # noqa: E402
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            capture_output=True, text=True, check=True
+        )
+        logger.info("Alembic migrations applied: %s", result.stdout.strip() or "up to date")
+    except subprocess.CalledProcessError as e:
+        logger.error("Alembic migration failed: %s", e.stderr)
+        raise
+    yield
+
+
 app = FastAPI(
     title="KitchenLedger AI Service",
     version="1.0.0",
     docs_url="/docs",
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 

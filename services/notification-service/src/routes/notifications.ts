@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pool } from '../db';
 import { config } from '../config';
 import { sendPush } from '../providers/expo-push.provider';
+import { buildDailyDigest, buildWeeklySummary } from '../scheduler/digest.scheduler';
 
 export async function registerNotificationRoutes(app: FastifyInstance): Promise<void> {
 
@@ -90,6 +91,40 @@ export async function registerNotificationRoutes(app: FastifyInstance): Promise<
     );
 
     return reply.send({ success: true });
+  });
+
+  // GET /api/notifications/digest — daily digest for tenant
+  app.get('/api/notifications/digest', async (req, reply) => {
+    const tenantId = req.headers['x-tenant-id'] as string;
+    if (!tenantId) return reply.code(401).send(unauthorized());
+
+    const digest = await buildDailyDigest(tenantId);
+    const { rows } = await pool.query(
+      `SELECT id, title, body, created_at FROM notifications
+       WHERE tenant_id = $1 AND type = 'digest'
+       ORDER BY created_at DESC LIMIT 10`,
+      [tenantId]
+    );
+
+    return reply.send({ success: true, data: { ...digest, recent: rows } });
+  });
+
+  // GET /api/notifications/weekly-summary — weekly summary for tenant
+  app.get('/api/notifications/weekly-summary', async (req, reply) => {
+    const tenantId = req.headers['x-tenant-id'] as string;
+    if (!tenantId) return reply.code(401).send(unauthorized());
+
+    const summary = await buildWeeklySummary(tenantId);
+    const { rows } = await pool.query(
+      `SELECT type, priority, COUNT(*) AS count
+       FROM notifications
+       WHERE tenant_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
+       GROUP BY type, priority
+       ORDER BY count DESC`,
+      [tenantId]
+    );
+
+    return reply.send({ success: true, data: { ...summary, breakdown: rows } });
   });
 
   // ── Device tokens ─────────────────────────────────────────────

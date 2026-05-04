@@ -58,6 +58,8 @@ public class TaskService {
                 .dueDate(req.getDueDate())
                 .priority(req.getPriority())
                 .recurring(req.isRecurring())
+                .requiresPhoto(req.isRequiresPhoto())
+                .category(req.getCategory())
                 .createdBy(createdBy)
                 .build();
         return taskRepository.save(task);
@@ -83,6 +85,9 @@ public class TaskService {
         Task task = getById(tenantId, id);
         if (task.getStatus() == TaskStatus.completed) {
             throw new ValidationException("Task is already completed.");
+        }
+        if (task.isRequiresPhoto() && (req.getPhotoUrl() == null || req.getPhotoUrl().isBlank())) {
+            throw new ValidationException("Photo required for this task");
         }
         task.setStatus(TaskStatus.completed);
         taskRepository.save(task);

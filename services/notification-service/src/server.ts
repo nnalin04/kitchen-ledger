@@ -4,6 +4,7 @@ import { config } from './config';
 import { runMigrations } from './db/migrate';
 import { startEventConsumer, stopEventConsumer } from './consumers/event.consumer';
 import { registerNotificationRoutes } from './routes/notifications';
+import { startDigestScheduler } from './scheduler/digest.scheduler';
 
 const app = Fastify({
   logger: {
@@ -59,6 +60,9 @@ async function bootstrap(): Promise<void> {
   startEventConsumer().catch(err => {
     app.log.error('RabbitMQ consumer failed to start:', err);
   });
+
+  // Start digest + weekly summary cron schedulers
+  startDigestScheduler();
 
   // HTTP server
   await app.listen({ port: config.PORT, host: '0.0.0.0' });

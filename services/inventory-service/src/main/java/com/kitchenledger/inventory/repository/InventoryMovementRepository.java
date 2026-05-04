@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,4 +14,7 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
     Page<InventoryMovement> findByInventoryItemIdOrderByCreatedAtDesc(UUID itemId, Pageable pageable);
 
     List<InventoryMovement> findByTenantIdAndInventoryItemIdOrderByCreatedAtDesc(UUID tenantId, UUID itemId);
+
+    List<InventoryMovement> findByTenantIdAndInventoryItemIdAndCreatedAtAfterOrderByCreatedAtDesc(
+            UUID tenantId, UUID inventoryItemId, Instant since);
 }

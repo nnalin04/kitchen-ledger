@@ -12,10 +12,14 @@
     "test": "turbo run test",
     "lint": "turbo run lint",
     "clean": "turbo run clean",
-    "infra:up": "docker-compose -f infrastructure/docker-compose.yml up -d",
-    "infra:down": "docker-compose -f infrastructure/docker-compose.yml down",
-    "infra:logs": "docker-compose -f infrastructure/docker-compose.yml logs -f",
+    "infra:up": "docker compose -f infrastructure/docker-compose.yml --env-file .env up -d",
+    "infra:up:build": "docker compose -f infrastructure/docker-compose.yml --env-file .env up -d --build",
+    "infra:down": "docker compose -f infrastructure/docker-compose.yml --env-file .env down",
+    "infra:down:volumes": "docker compose -f infrastructure/docker-compose.yml --env-file .env down -v",
+    "infra:logs": "docker compose -f infrastructure/docker-compose.yml --env-file .env logs -f",
+    "infra:ps": "docker compose -f infrastructure/docker-compose.yml --env-file .env ps",
     "health": "curl -s http://localhost:8080/health | jq .",
+    "health:all": "for port in 8080 8081 8082 8083 8084 8085 8086 8087 8088; do echo -n \"Port $port: \" && curl -sf http://localhost:$port/health && echo || echo UNREACHABLE; done",
     "generate:types": "curl -sf http://localhost:8081/v3/api-docs -o /tmp/kl-auth.json && curl -sf http://localhost:8082/v3/api-docs -o /tmp/kl-inventory.json && curl -sf http://localhost:8083/v3/api-docs -o /tmp/kl-finance.json && curl -sf http://localhost:8088/v3/api-docs -o /tmp/kl-staff.json && npx --yes openapi-typescript /tmp/kl-auth.json -o packages/types/src/generated/auth.d.ts && npx openapi-typescript /tmp/kl-inventory.json -o packages/types/src/generated/inventory.d.ts && npx openapi-typescript /tmp/kl-finance.json -o packages/types/src/generated/finance.d.ts && npx openapi-typescript /tmp/kl-staff.json -o packages/types/src/generated/staff.d.ts && echo 'Types generated in packages/types/src/generated/'"
   },
   "devDependencies": {

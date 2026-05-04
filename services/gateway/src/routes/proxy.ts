@@ -21,11 +21,13 @@ import type { ProxyResult } from '../circuit-breaker';
 
 // ── Service routing table ─────────────────────────────────────────────────────
 
-const SERVICE_PREFIXES: Array<{ prefix: string; upstream: string }> = [
+// rewritePrefix: if set, the inbound prefix is replaced with this before forwarding.
+// Java services expose /api/v1/<service>/... but the gateway routes are /api/<service>/...
+const SERVICE_PREFIXES: Array<{ prefix: string; upstream: string; rewritePrefix?: string }> = [
   { prefix: '/api/auth',          upstream: config.AUTH_SERVICE_URL },
-  { prefix: '/api/inventory',     upstream: config.INVENTORY_SERVICE_URL },
-  { prefix: '/api/finance',       upstream: config.FINANCE_SERVICE_URL },
-  { prefix: '/api/staff',         upstream: config.STAFF_SERVICE_URL },
+  { prefix: '/api/inventory',     upstream: config.INVENTORY_SERVICE_URL, rewritePrefix: '/api/v1/inventory' },
+  { prefix: '/api/finance',       upstream: config.FINANCE_SERVICE_URL,   rewritePrefix: '/api/v1/finance' },
+  { prefix: '/api/staff',         upstream: config.STAFF_SERVICE_URL,     rewritePrefix: '/api/v1/staff' },
   { prefix: '/api/ai',            upstream: config.AI_SERVICE_URL },
   { prefix: '/api/files',         upstream: config.FILE_SERVICE_URL },
   { prefix: '/api/notifications', upstream: config.NOTIFICATION_SERVICE_URL },
@@ -65,7 +67,7 @@ export async function registerProxies(app: FastifyInstance): Promise<void> {
     breakers.set(prefix, createServiceBreaker(upstream));
   }
 
-  for (const { prefix } of SERVICE_PREFIXES) {
+  for (const { prefix, rewritePrefix } of SERVICE_PREFIXES) {
     const breaker = breakers.get(prefix)!;
 
     const handler = async (
@@ -80,9 +82,15 @@ export async function registerProxies(app: FastifyInstance): Promise<void> {
         }
       }
 
+      // Rewrite path prefix if the upstream service uses a different base path
+      // (e.g. /api/inventory → /api/v1/inventory for Spring Boot services)
+      const upstreamUrl = rewritePrefix
+        ? req.url.replace(prefix, rewritePrefix)
+        : req.url;
+
       const args: ProxyArgs = {
         method:  req.method,
-        url:     req.url,
+        url:     upstreamUrl,
         headers: forwardHeaders,
         body:    req.body as Buffer | null,
       };

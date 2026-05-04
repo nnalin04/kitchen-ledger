@@ -2,6 +2,7 @@ package com.kitchenledger.staff.service;
 
 import com.kitchenledger.staff.client.TenantTimezoneCache;
 import com.kitchenledger.staff.dto.request.ClockInRequest;
+import com.kitchenledger.staff.dto.response.OvertimeSummaryResponse;
 import com.kitchenledger.staff.event.StaffEventPublisher;
 import com.kitchenledger.staff.exception.ConflictException;
 import com.kitchenledger.staff.exception.ResourceNotFoundException;
@@ -21,11 +22,15 @@ import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -101,6 +106,52 @@ public class AttendanceService {
         checkOvertimeApproaching(tenantId, employeeId, clockOut);
 
         return saved;
+    }
+
+    @Transactional(readOnly = true)
+    public OvertimeSummaryResponse getOvertimeSummary(UUID tenantId, LocalDate weekOf) {
+        ZoneId zone = ZoneId.of(timezoneCache.get(tenantId));
+        LocalDate monday = weekOf.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate sunday = monday.plusDays(6);
+
+        Instant weekStart = monday.atStartOfDay(zone).toInstant();
+        Instant weekEnd   = sunday.plusDays(1).atStartOfDay(zone).toInstant();
+
+        List<Object[]> rows = attendanceRepository.sumHoursWorkedPerEmployee(tenantId, weekStart, weekEnd);
+
+        Map<UUID, BigDecimal> hoursMap = rows.stream()
+                .collect(Collectors.toMap(
+                        r -> (UUID) r[0],
+                        r -> (BigDecimal) r[1]
+                ));
+
+        List<Employee> employees = employeeRepository.findByTenantIdAndDeletedAtIsNullOrderByLastNameAsc(tenantId);
+
+        List<OvertimeSummaryResponse.EmployeeOvertimeEntry> entries = new ArrayList<>();
+        for (Employee emp : employees) {
+            BigDecimal total = hoursMap.getOrDefault(emp.getId(), BigDecimal.ZERO)
+                    .setScale(2, RoundingMode.HALF_UP);
+            BigDecimal regular  = total.min(OVERTIME_THRESHOLD).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal overtime = total.subtract(regular).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+
+            entries.add(OvertimeSummaryResponse.EmployeeOvertimeEntry.builder()
+                    .employeeId(emp.getId())
+                    .employeeName(emp.getFirstName() + " " + emp.getLastName())
+                    .position(emp.getRole())
+                    .totalHours(total)
+                    .regularHours(regular)
+                    .overtimeHours(overtime)
+                    .overtimeApproaching(total.compareTo(OVERTIME_WARNING_HOURS) >= 0
+                            && total.compareTo(OVERTIME_THRESHOLD) < 0)
+                    .overtimeExceeded(total.compareTo(OVERTIME_THRESHOLD) >= 0)
+                    .build());
+        }
+
+        return OvertimeSummaryResponse.builder()
+                .weekStart(monday)
+                .weekEnd(sunday)
+                .employees(entries)
+                .build();
     }
 
     private void checkOvertimeApproaching(UUID tenantId, UUID employeeId, Instant clockOut) {

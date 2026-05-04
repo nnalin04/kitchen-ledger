@@ -14,8 +14,8 @@ const configSchema = z.object({
   NOTIFICATION_SERVICE_URL: z.string().url(),
   REPORT_SERVICE_URL: z.string().url(),
 
-  // JWT public key for RS256 verification (PEM string with \n)
-  JWT_PUBLIC_KEY: z.string().min(1),
+  // JWT public key for RS256 verification — env may use literal \n; normalize to real newlines
+  JWT_PUBLIC_KEY: z.string().min(1).transform(k => k.replace(/\\n/g, '\n')),
 
   // Redis
   REDIS_URL: z.string().url().default('redis://localhost:6379'),

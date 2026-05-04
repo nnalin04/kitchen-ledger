@@ -37,7 +37,7 @@ public class GatewayTrustFilter extends OncePerRequestFilter {
         MDC.put("correlationId", correlationId != null ? correlationId : "none");
 
         // Internal service-to-service calls and health checks bypass gateway header validation.
-        if (path.startsWith("/internal/") || path.startsWith("/actuator/")) {
+        if (path.startsWith("/internal/") || path.startsWith("/actuator/") || path.equals("/health")) {
             try {
                 filterChain.doFilter(request, response);
             } finally {

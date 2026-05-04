@@ -124,18 +124,18 @@ public class InternalAuthController {
             HttpServletRequest request) {
         checkInternalSecret(request);
 
-        return authTokenRepository
+        var tokenOpt = authTokenRepository
                 .findFirstByUserIdAndTokenTypeAndUsedAtIsNullAndExpiresAtAfterOrderByCreatedAtDesc(
-                        userId, TokenType.invite, Instant.now())
-                .map(token -> {
-                    String rawToken = (String) token.getMetadata().get("raw_token");
-                    if (rawToken == null || rawToken.isBlank()) {
-                        return ResponseEntity.<Map<String, String>>notFound().build();
-                    }
-                    String inviteUrl = webUrl + "/invite/accept?token=" + rawToken;
-                    return ResponseEntity.ok(Map.of("invite_url", inviteUrl));
-                })
-                .orElse(ResponseEntity.notFound().build());
+                        userId, TokenType.invite, Instant.now());
+        if (tokenOpt.isEmpty()) {
+            return ResponseEntity.<Map<String, String>>notFound().build();
+        }
+        String rawToken = (String) tokenOpt.get().getMetadata().get("raw_token");
+        if (rawToken == null || rawToken.isBlank()) {
+            return ResponseEntity.<Map<String, String>>notFound().build();
+        }
+        String inviteUrl = webUrl + "/invite/accept?token=" + rawToken;
+        return ResponseEntity.ok(Map.of("invite_url", inviteUrl));
     }
 
     private void checkInternalSecret(HttpServletRequest request) {

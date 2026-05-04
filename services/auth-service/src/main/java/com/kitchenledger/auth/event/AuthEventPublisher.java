@@ -161,9 +161,9 @@ public class AuthEventPublisher {
         EventEnvelope envelope = EventEnvelope.builder()
                 .eventId(java.util.UUID.randomUUID().toString())
                 .eventType(routingKey)
-                .tenantId(tenantId.toString())
+                .tenantId(tenantId)
                 .producedBy("auth-service")
-                .producedAt(java.time.Instant.now().toString())
+                .producedAt(java.time.Instant.now())
                 .version("1.0")
                 .payload(payload)
                 .build();
@@ -174,7 +174,7 @@ public class AuthEventPublisher {
         try {
             String json = objectMapper.writeValueAsString(envelope);
             outboxEventRepository.save(OutboxEvent.builder()
-                    .tenantId(java.util.UUID.fromString(envelope.getTenantId()))
+                    .tenantId(envelope.getTenantId())
                     .routingKey(routingKey)
                     .payload(json)
                     .failedAt(java.time.Instant.now())

@@ -2,6 +2,7 @@ package com.kitchenledger.staff.controller;
 
 import com.kitchenledger.staff.dto.request.ClockInRequest;
 import com.kitchenledger.staff.dto.response.AttendanceResponse;
+import com.kitchenledger.staff.dto.response.OvertimeSummaryResponse;
 import com.kitchenledger.staff.security.GatewayTrustFilter;
 import com.kitchenledger.staff.security.RequiresRole;
 import com.kitchenledger.staff.service.AttendanceService;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 
@@ -61,6 +63,15 @@ public class AttendanceController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         BigDecimal hours = attendanceService.totalHoursWorked(tenantId(req), employeeId, from, to);
         return ResponseEntity.ok(Map.of("total_hours_worked", hours));
+    }
+
+    @GetMapping("/overtime-summary")
+    @RequiresRole({"owner", "manager"})
+    public ResponseEntity<OvertimeSummaryResponse> overtimeSummary(
+            HttpServletRequest req,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekOf) {
+        LocalDate date = weekOf != null ? weekOf : LocalDate.now();
+        return ResponseEntity.ok(attendanceService.getOvertimeSummary(tenantId(req), date));
     }
 
     @PostMapping("/clock-in")

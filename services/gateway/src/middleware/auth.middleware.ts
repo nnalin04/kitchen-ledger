@@ -17,6 +17,7 @@ const PUBLIC_ROUTES: PublicRoute[] = [
   // Accept-invite is POST only: GET/PUT/etc. still require a valid JWT.
   { path: '/api/auth/users/accept-invite', methods: ['POST'] },
   '/health',
+  '/ready',
 ];
 
 export interface JWTPayload {

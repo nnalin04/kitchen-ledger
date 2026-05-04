@@ -19,4 +19,6 @@ public class CreateTaskRequest {
     private LocalDate dueDate;
     private TaskPriority priority = TaskPriority.medium;
     private boolean recurring = false;
+    private boolean requiresPhoto = false;
+    private String category;
 }

@@ -47,7 +47,10 @@ public class InventoryItemService {
     @Transactional(readOnly = true)
     public Page<InventoryItem> list(UUID tenantId, String search, String abcCategory,
                                     boolean lowStockOnly, Pageable pageable) {
-        return itemRepository.findWithFilters(tenantId, search, abcCategory, lowStockOnly, pageable);
+        // Pre-compute search pattern on Java side to avoid Hibernate 6 bytea type inference for null strings
+        String searchPattern = (search != null && !search.isBlank())
+                ? "%" + search.toLowerCase() + "%" : null;
+        return itemRepository.findWithFilters(tenantId, searchPattern, abcCategory, lowStockOnly, pageable);
     }
 
     @Transactional(readOnly = true)

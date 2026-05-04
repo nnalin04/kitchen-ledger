@@ -33,7 +33,7 @@ public class GatewayTrustFilter extends OncePerRequestFilter {
 
         // Internal service-to-service calls and health checks bypass gateway header validation.
         // They are protected by INTERNAL_SERVICE_SECRET or need no auth.
-        if (path.startsWith("/internal/") || path.startsWith("/actuator/")) {
+        if (path.startsWith("/internal/") || path.startsWith("/actuator/") || path.equals("/health")) {
             try {
                 filterChain.doFilter(request, response);
             } finally {

@@ -192,8 +192,9 @@ public class StockReceiptService {
             if (name == null || name.isBlank()) continue;
 
             // Fetch up to 2 to detect ambiguity — single match auto-fills, multiple require user confirmation
+            String searchPattern = "%" + name.toLowerCase() + "%";
             Page<InventoryItem> matches = itemRepository.findWithFilters(
-                    tenantId, name, null, false, PageRequest.of(0, 2));
+                    tenantId, searchPattern, null, false, PageRequest.of(0, 2));
             if (matches.isEmpty()) {
                 log.debug("prefillFromOcr: no inventory item matched OCR name '{}' on receipt {}", name, receiptId);
                 continue;

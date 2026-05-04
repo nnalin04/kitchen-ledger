@@ -66,7 +66,7 @@ CREATE TABLE refresh_tokens (
     revoked_at  TIMESTAMPTZ,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     user_agent  VARCHAR(500),
-    ip_address  INET
+    ip_address  TEXT
 );
 CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id) WHERE revoked_at IS NULL;
 
@@ -91,7 +91,7 @@ CREATE TABLE auth_audit_logs (
     tenant_id   UUID REFERENCES tenants(id),
     user_id     UUID REFERENCES users(id),
     event_type  VARCHAR(100) NOT NULL,
-    ip_address  INET,
+    ip_address  TEXT,
     user_agent  VARCHAR(500),
     metadata    JSONB NOT NULL DEFAULT '{}',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()

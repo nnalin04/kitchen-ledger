@@ -22,8 +22,12 @@ CREATE INDEX IF NOT EXISTS idx_notifications_tenant
     ON notifications(tenant_id, created_at DESC);
 
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS tenant_isolation ON notifications
-    USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::UUID);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'notifications' AND policyname = 'tenant_isolation') THEN
+    CREATE POLICY tenant_isolation ON notifications
+        USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::UUID);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS device_tokens (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
