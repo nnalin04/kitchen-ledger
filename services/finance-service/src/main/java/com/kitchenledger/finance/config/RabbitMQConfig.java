@@ -30,7 +30,10 @@ public class RabbitMQConfig {
 
     @Bean
     public Queue financeServiceQueue() {
-        return QueueBuilder.durable(financeQueue).build();
+        return QueueBuilder.durable(financeQueue)
+                .withArgument("x-dead-letter-exchange", "kitchenledger.dlx")
+                .withArgument("x-dead-letter-routing-key", "finance-service.dead")
+                .build();
     }
 
     @Bean

@@ -30,7 +30,10 @@ public class RabbitMQConfig {
 
     @Bean
     public Queue staffServiceQueue() {
-        return QueueBuilder.durable(staffQueue).build();
+        return QueueBuilder.durable(staffQueue)
+                .withArgument("x-dead-letter-exchange", "kitchenledger.dlx")
+                .withArgument("x-dead-letter-routing-key", "staff-service.dead")
+                .build();
     }
 
     @Bean
