@@ -33,6 +33,11 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", ex.getMessage());
     }
 
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidCredentials(InvalidCredentialsException ex) {
+        return error(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", ex.getMessage());
+    }
+
     @ExceptionHandler(AccountLockedException.class)
     public ResponseEntity<Map<String, Object>> handleAccountLocked(AccountLockedException ex) {
         return error(HttpStatus.TOO_MANY_REQUESTS, "ACCOUNT_LOCKED", ex.getMessage());

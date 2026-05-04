@@ -7,6 +7,7 @@ import com.kitchenledger.auth.dto.response.UserResponse;
 import com.kitchenledger.auth.event.AuthEventPublisher;
 import com.kitchenledger.auth.exception.AccountLockedException;
 import com.kitchenledger.auth.exception.ConflictException;
+import com.kitchenledger.auth.exception.InvalidCredentialsException;
 import com.kitchenledger.auth.exception.ResourceNotFoundException;
 import com.kitchenledger.auth.exception.ValidationException;
 import com.kitchenledger.auth.model.RefreshToken;
@@ -135,11 +136,11 @@ public class AuthService {
 
         // Find tenant by email first (tenants.email is unique)
         Tenant tenant = tenantRepository.findByEmail(req.getEmail().toLowerCase())
-                .orElseThrow(() -> new ValidationException("Invalid email or password"));
+                .orElseThrow(InvalidCredentialsException::new);
 
         // Find user within that tenant
-        User user = userRepository.findByEmailAndTenantId(req.getEmail(), tenant.getId())
-                .orElseThrow(() -> new ValidationException("Invalid email or password"));
+        User user = userRepository.findByEmailAndTenantId(req.getEmail().toLowerCase(), tenant.getId())
+                .orElseThrow(InvalidCredentialsException::new);
 
         if (!user.isActive() || user.getDeletedAt() != null) {
             throw new ValidationException("Account is inactive");
@@ -155,7 +156,7 @@ public class AuthService {
                 redis.delete(failureKey);
                 log.warn("Account locked after {} failed attempts: {}", LOGIN_MAX_FAILURES, req.getEmail());
             }
-            throw new ValidationException("Invalid email or password");
+            throw new InvalidCredentialsException();
         }
 
         // Successful login — clear failure counter
@@ -188,14 +189,14 @@ public class AuthService {
     public AuthResponse refresh(RefreshTokenRequest req) {
         String hash = sha256Hex(req.getRefreshToken());
         RefreshToken rt = refreshTokenRepository.findByTokenHash(hash)
-                .orElseThrow(() -> new ValidationException("Invalid refresh token"));
+                .orElseThrow(InvalidCredentialsException::new);
 
         if (rt.isRevoked() || rt.isExpired()) {
-            throw new ValidationException("Refresh token is expired or revoked");
+            throw new InvalidCredentialsException();
         }
 
         User user = userRepository.findByIdAndDeletedAtIsNull(rt.getUserId())
-                .orElseThrow(() -> new ValidationException("User not found"));
+                .orElseThrow(InvalidCredentialsException::new);
 
         if (!user.isActive()) {
             throw new ValidationException("Account is inactive");
