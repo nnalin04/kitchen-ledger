@@ -38,8 +38,7 @@ public class RefreshToken {
     @Column(name = "user_agent", length = 500)
     private String userAgent;
 
-    // Stored as String; PostgreSQL INET column accepts string representations
-    @Column(name = "ip_address", columnDefinition = "inet")
+    @Column(name = "ip_address")
     private String ipAddress;
 
     public boolean isExpired() {

@@ -31,7 +31,7 @@ public class AuthAuditLog {
     @Column(name = "event_type", nullable = false, length = 100)
     private String eventType;
 
-    @Column(name = "ip_address", columnDefinition = "inet")
+    @Column(name = "ip_address")
     private String ipAddress;
 
     @Column(name = "user_agent", length = 500)

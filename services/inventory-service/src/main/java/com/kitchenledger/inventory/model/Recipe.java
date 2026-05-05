@@ -80,8 +80,7 @@ public class Recipe {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @JoinColumn(name = "recipe_id")
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY, mappedBy = "recipe")
     @Builder.Default
     private List<RecipeIngredient> ingredients = new ArrayList<>();
 

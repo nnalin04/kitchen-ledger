@@ -57,6 +57,13 @@ public class StockTransferService {
             InventoryItem item = itemRepository.findByIdAndTenantIdAndDeletedAtIsNull(itemReq.getInventoryItemId(), tenantId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found: " + itemReq.getInventoryItemId()));
 
+            if (item.getCurrentStock().compareTo(itemReq.getQuantity()) < 0) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "Insufficient stock for item '" + item.getName()
+                        + "': available=" + item.getCurrentStock()
+                        + ", requested=" + itemReq.getQuantity());
+            }
+
             StockTransferItem transferItem = StockTransferItem.builder()
                     .inventoryItem(item)
                     .quantity(itemReq.getQuantity())

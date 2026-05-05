@@ -83,8 +83,7 @@ public class PurchaseOrder {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @JoinColumn(name = "purchase_order_id")
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY, mappedBy = "purchaseOrder")
     @Builder.Default
     private List<PurchaseOrderItem> items = new ArrayList<>();
 

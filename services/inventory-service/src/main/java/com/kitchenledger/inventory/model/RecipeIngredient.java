@@ -1,5 +1,6 @@
 package com.kitchenledger.inventory.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -18,7 +19,14 @@ public class RecipeIngredient {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "recipe_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "recipe_id", nullable = false)
+    @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private Recipe recipe;
+
+    @Column(name = "recipe_id", insertable = false, updatable = false)
     private UUID recipeId;
 
     /** Exactly one of inventoryItemId or subRecipeId must be non-null. */

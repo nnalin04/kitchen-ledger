@@ -48,15 +48,6 @@ public class PurchaseOrderService {
     public PurchaseOrder create(UUID tenantId, UUID createdBy, CreatePurchaseOrderRequest req) {
         String poNumber = generatePoNumber(tenantId);
 
-        List<PurchaseOrderItem> lineItems = req.getItems().stream()
-                .map(li -> PurchaseOrderItem.builder()
-                        .inventoryItemId(li.getInventoryItemId())
-                        .orderedQuantity(li.getOrderedQuantity())
-                        .orderedUnit(li.getOrderedUnit())
-                        .unitPrice(li.getUnitPrice())
-                        .build())
-                .toList();
-
         PurchaseOrder po = PurchaseOrder.builder()
                 .tenantId(tenantId)
                 .poNumber(poNumber)
@@ -65,8 +56,18 @@ public class PurchaseOrderService {
                 .taxAmount(req.getTaxAmount())
                 .notes(req.getNotes())
                 .createdBy(createdBy)
-                .items(new java.util.ArrayList<>(lineItems))
                 .build();
+
+        List<PurchaseOrderItem> lineItems = req.getItems().stream()
+                .map(li -> PurchaseOrderItem.builder()
+                        .purchaseOrder(po)
+                        .inventoryItemId(li.getInventoryItemId())
+                        .orderedQuantity(li.getOrderedQuantity())
+                        .orderedUnit(li.getOrderedUnit())
+                        .unitPrice(li.getUnitPrice())
+                        .build())
+                .toList();
+        po.getItems().addAll(lineItems);
 
         po.recalculateTotals();
         return poRepository.save(po);

@@ -1,5 +1,6 @@
 package com.kitchenledger.inventory.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -19,7 +20,14 @@ public class PurchaseOrderItem {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "purchase_order_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "purchase_order_id", nullable = false)
+    @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private PurchaseOrder purchaseOrder;
+
+    @Column(name = "purchase_order_id", insertable = false, updatable = false)
     private UUID purchaseOrderId;
 
     @Column(name = "inventory_item_id", nullable = false)

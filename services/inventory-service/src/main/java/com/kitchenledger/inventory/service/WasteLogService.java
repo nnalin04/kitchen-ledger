@@ -43,6 +43,11 @@ public class WasteLogService {
         return wasteLogRepository.sumEstimatedCostByPeriod(tenantId, from, to);
     }
 
+    @Transactional(readOnly = true)
+    public List<WasteLog> listByDateRange(UUID tenantId, Instant from, Instant to) {
+        return wasteLogRepository.findByTenantIdAndLoggedAtBetweenOrderByLoggedAtDesc(tenantId, from, to);
+    }
+
     /**
      * Logs waste, decrements stock, writes a movement record.
      * Fires stock-low event if stock drops below PAR after waste.

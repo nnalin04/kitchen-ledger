@@ -270,7 +270,7 @@ class AuthServiceTest {
         when(refreshTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(rt));
         when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        authService.logout(req);
+        authService.logout(req, null);
 
         assertThat(rt.getRevokedAt()).isNotNull();
         verify(refreshTokenRepository).save(rt);
@@ -283,7 +283,7 @@ class AuthServiceTest {
 
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.empty());
 
-        assertThatCode(() -> authService.logout(req)).doesNotThrowAnyException();
+        assertThatCode(() -> authService.logout(req, null)).doesNotThrowAnyException();
     }
 
     // ── changePassword ────────────────────────────────────────────

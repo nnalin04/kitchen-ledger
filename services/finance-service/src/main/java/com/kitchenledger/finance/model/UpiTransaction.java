@@ -42,7 +42,7 @@ public class UpiTransaction {
     @Column(name = "settled_at")
     private Instant settledAt;
 
-    @Column(name = "raw_webhook", columnDefinition = "jsonb")
+    @Column(name = "raw_webhook", columnDefinition = "text")
     private String rawWebhook;
 
     @Column(name = "created_at", nullable = false, updatable = false)

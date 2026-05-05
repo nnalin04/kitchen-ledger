@@ -130,7 +130,7 @@ public class RecipeService {
             }
 
             RecipeIngredient ingredient = RecipeIngredient.builder()
-                    .recipeId(recipe.getId())   // null on first save — JPA sets via @JoinColumn
+                    .recipe(recipe)
                     .inventoryItemId(ing.getInventoryItemId())
                     .subRecipeId(ing.getSubRecipeId())
                     .quantity(ing.getQuantity())

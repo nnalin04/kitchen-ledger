@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -34,6 +37,30 @@ public class WasteLogController {
         return ResponseEntity.ok(
                 wasteLogService.list(tenantId(req), pageable)
                         .map(WasteLogResponse::from));
+    }
+
+    @GetMapping("/report")
+    public ResponseEntity<Map<String, Object>> report(
+            HttpServletRequest req,
+            @RequestParam(required = false) String period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekOf) {
+        UUID tenantId = tenantId(req);
+        Instant from;
+        Instant to;
+        if (weekOf != null) {
+            from = weekOf.atStartOfDay(ZoneOffset.UTC).toInstant();
+            to = weekOf.plusWeeks(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        } else {
+            to = Instant.now();
+            from = to.minusSeconds(7 * 24 * 3600);
+        }
+        BigDecimal totalCost = wasteLogService.totalWasteCost(tenantId, from, to);
+        List<?> logs = wasteLogService.listByDateRange(tenantId, from, to);
+        return ResponseEntity.ok(Map.of(
+                "period", period != null ? period : "custom",
+                "totalWasteCost", totalCost,
+                "entryCount", logs.size()
+        ));
     }
 
     @GetMapping("/cost-summary")

@@ -56,22 +56,9 @@ public class StockReceiptService {
 
     @Transactional
     public StockReceipt create(UUID tenantId, UUID receivedBy, CreateStockReceiptRequest req) {
-        List<StockReceiptItem> lineItems = req.getItems().stream()
-                .map(li -> StockReceiptItem.builder()
-                        .inventoryItemId(li.getInventoryItemId())
-                        .expectedQuantity(li.getExpectedQuantity())
-                        .receivedQuantity(li.getReceivedQuantity())
-                        .remainingQuantity(li.getReceivedQuantity()) // FEFO: starts fully available
-                        .unit(li.getUnit())
-                        .unitCost(li.getUnitCost())
-                        .expiryDate(li.getExpiryDate())
-                        .batchNumber(li.getBatchNumber())
-                        .storageLocation(li.getStorageLocation())
-                        .condition(StockItemCondition.valueOf(
-                                li.getCondition() != null ? li.getCondition() : "good"))
-                        .build())
-                .toList();
-
+        // Save the receipt header first to obtain its ID before inserting items.
+        // stock_receipt_items.stock_receipt_id is NOT NULL, so items must reference
+        // an already-persisted receipt.
         StockReceipt receipt = StockReceipt.builder()
                 .tenantId(tenantId)
                 .purchaseOrderId(req.getPurchaseOrderId())
@@ -82,10 +69,30 @@ public class StockReceiptService {
                 .invoiceAmount(req.getInvoiceAmount())
                 .invoiceImageUrl(req.getInvoiceImageUrl())
                 .receivedBy(receivedBy)
-                .items(new ArrayList<>(lineItems))
+                .items(new ArrayList<>())
                 .build();
+        receipt = receiptRepository.save(receipt);
 
-        return receiptRepository.save(receipt);
+        final UUID receiptId = receipt.getId();
+        List<StockReceiptItem> lineItems = req.getItems().stream()
+                .map(li -> StockReceiptItem.builder()
+                        .stockReceiptId(receiptId)
+                        .inventoryItemId(li.getInventoryItemId())
+                        .expectedQuantity(li.getExpectedQuantity())
+                        .receivedQuantity(li.getReceivedQuantity())
+                        .remainingQuantity(li.getReceivedQuantity())
+                        .unit(li.getUnit())
+                        .unitCost(li.getUnitCost())
+                        .expiryDate(li.getExpiryDate())
+                        .batchNumber(li.getBatchNumber())
+                        .storageLocation(li.getStorageLocation())
+                        .condition(StockItemCondition.valueOf(
+                                li.getCondition() != null ? li.getCondition() : "good"))
+                        .build())
+                .toList();
+        receiptItemRepository.saveAll(lineItems);
+        receipt.setItems(new ArrayList<>(lineItems));
+        return receipt;
     }
 
     /**
