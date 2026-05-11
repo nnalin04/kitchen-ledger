@@ -20,9 +20,10 @@ class Settings(BaseSettings):
     rabbitmq_url: str = "amqp://kl_rabbit:kl_rabbit_pass@localhost:5672"
 
     # AI providers
-    openai_api_key: str = ""
-    google_cloud_credentials: str = ""  # path to GCP service account JSON
-    mindee_api_key: str = ""
+    sarvam_api_key: str = ""                 # Sarvam AI — voice ASR (Indian languages)
+    google_cloud_credentials: str = ""       # Google Cloud Vision — image/handwriting OCR
+    mindee_api_key: str = ""                 # Mindee — receipt/invoice OCR
+    gemini_api_key: str = ""                 # Gemini Flash — optional LLM for structured parsing
 
     # Internal service calls
     inventory_service_url: str = "http://inventory-service:8082"

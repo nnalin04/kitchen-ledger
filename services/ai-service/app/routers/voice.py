@@ -55,8 +55,8 @@ async def transcribe_voice(
     from app.services import voice_service
     from app.clients.inventory_client import get_item_names
 
-    if not settings.openai_api_key:
-        raise HTTPException(status_code=503, detail="OpenAI API key not configured")
+    if not settings.sarvam_api_key:
+        raise HTTPException(status_code=503, detail="Sarvam API key not configured")
 
     # Validate audio type
     content_type = audio.content_type or ""
@@ -79,7 +79,7 @@ async def transcribe_voice(
         job_type="voice_transcribe",
         status="processing",
         input_data={"command_type": command_type, "language": language},
-        model_used="whisper-1+gpt-4o-mini",
+        model_used="sarvam-saarika:v2",
     )
     db.add(job)
     db.commit()

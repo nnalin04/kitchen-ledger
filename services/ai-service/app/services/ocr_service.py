@@ -4,38 +4,33 @@ OCR Service — handwritten notebook scanning pipeline.
 Pipeline:
   1. preprocess_image   — PIL enhance for OCR accuracy
   2. extract_text       — Google Cloud Vision document_text_detection
-  3. parse_with_gpt4o   — GPT-4o multimodal JSON extraction
-  4. match_to_catalog   — exact + GPT-4o-mini fuzzy match against item catalog
+  3. parse_ocr_text     — regex line parser + optional Gemini Flash refinement
+  4. match_to_catalog   — exact match first, then rapidfuzz for fuzzy matching
 """
 from __future__ import annotations
 
-import base64
 import io
 import json
 import logging
+import re
 from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
-# Import at module level so tests can patch via app.services.ocr_service.*
-from app.core.config import settings  # noqa: E402
-from app.clients.inventory_client import get_item_names  # noqa: E402
+from app.core.config import settings
+from app.clients.inventory_client import get_item_names
 
 
-# ── Image preprocessing ────────────────────────────────────────────────────
+# ── Image preprocessing ────────────────────────────────────────────────────────
 
 def preprocess_image(image_bytes: bytes) -> bytes:
-    """Convert image to grayscale, enhance contrast + sharpness for OCR.
-
-    Returns JPEG bytes at quality=95.
-    """
+    """Convert to grayscale, enhance contrast + sharpness for better OCR."""
     from PIL import Image, ImageEnhance, ImageFilter
 
     if not image_bytes:
         raise ValueError("image_bytes cannot be empty")
 
-    img = Image.open(io.BytesIO(image_bytes)).convert("L")  # grayscale
-
+    img = Image.open(io.BytesIO(image_bytes)).convert("L")
     img = ImageEnhance.Contrast(img).enhance(2.0)
     img = ImageEnhance.Sharpness(img).enhance(2.0)
     img = img.filter(ImageFilter.SHARPEN)
@@ -45,12 +40,13 @@ def preprocess_image(image_bytes: bytes) -> bytes:
     return buf.getvalue()
 
 
-# ── Google Cloud Vision OCR ────────────────────────────────────────────────
+# ── Google Cloud Vision OCR ────────────────────────────────────────────────────
 
 def extract_text(image_bytes: bytes) -> str:
     """Run Google Cloud Vision document_text_detection.
 
-    Raises RuntimeError if Vision API returns an error.
+    Handles printed and handwritten text including Devanagari, Tamil, Telugu,
+    Gujarati, Kannada, Malayalam, Bengali scripts.
     """
     from google.cloud import vision as gcv
 
@@ -66,94 +62,158 @@ def extract_text(image_bytes: bytes) -> str:
     return ""
 
 
-# ── GPT-4o multimodal parsing ──────────────────────────────────────────────
+# ── Structured text parsing ────────────────────────────────────────────────────
 
-def parse_with_gpt4o(
+# Regex patterns for common inventory notebook line formats:
+# "Tomatoes  2 kg  ₹40"
+# "Onions: 5 kg"
+# "Chicken - 3 kg @ 280"
+# "Paneer 500g"
+
+_UNIT_RE = r"(kg|kgs|kilo|g|gm|gms|gram|grams|l|lt|ltr|litre|litres|liter|liters|ml|pcs|pc|piece|pieces|nos|dozen|pkt|packet|box|bottle|tin|bag)"
+_QTY_RE  = r"(\d+(?:\.\d+)?)"
+_PRICE_RE = r"(?:[@₹rs\.]+\s*)?(\d+(?:\.\d+)?)"
+
+LINE_PATTERN = re.compile(
+    rf"^(.+?)\s*[:\-–]?\s*{_QTY_RE}\s*{_UNIT_RE}(?:\s*{_PRICE_RE})?",
+    re.IGNORECASE,
+)
+
+EXPENSE_PATTERN = re.compile(
+    rf"^(.+?)\s*[:\-–]?\s*(?:rs\.?|₹)?\s*{_QTY_RE}",
+    re.IGNORECASE,
+)
+
+
+def parse_ocr_text(
     raw_text: str,
-    image_bytes: bytes,
     context_type: Literal["inventory", "expense"],
     known_items: list[str],
 ) -> dict[str, Any]:
-    """Parse raw OCR text + original image with GPT-4o multimodal.
+    """Parse raw OCR text into structured items using regex.
 
-    Uses response_format=json_object and temperature=0.1 for consistency.
+    If GEMINI_API_KEY is configured, sends the raw text to Gemini Flash for
+    improved accuracy on ambiguous/handwritten entries. Falls back to regex
+    if Gemini is unavailable.
     """
-    from openai import OpenAI
+    # Try Gemini if configured
+    if settings.gemini_api_key:
+        try:
+            return _parse_with_gemini(raw_text, context_type, known_items)
+        except Exception as exc:
+            logger.warning("Gemini parse failed (%s), falling back to regex", exc)
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    return _parse_with_regex(raw_text, context_type)
 
-    item_list_str = ", ".join(known_items[:50]) if known_items else "none"
+
+def _parse_with_regex(
+    raw_text: str,
+    context_type: Literal["inventory", "expense"],
+) -> dict[str, Any]:
+    """Rule-based line-by-line parser."""
+    lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+    items: list[dict[str, Any]] = []
+    expenses: list[dict[str, Any]] = []
+    unreadable: list[str] = []
+
+    for line in lines:
+        if context_type == "inventory":
+            m = LINE_PATTERN.match(line)
+            if m:
+                name, qty, unit, price = m.group(1), m.group(2), m.group(3), m.group(4)
+                items.append({
+                    "name": name.strip().title(),
+                    "quantity": float(qty),
+                    "unit": unit.lower(),
+                    "cost_per_unit": float(price) if price else None,
+                    "date": None,
+                    "notes": None,
+                })
+            else:
+                unreadable.append(line)
+        else:
+            m = EXPENSE_PATTERN.match(line)
+            if m:
+                expenses.append({
+                    "description": m.group(1).strip().title(),
+                    "amount": float(m.group(2)),
+                    "payee": None,
+                    "date": None,
+                })
+            else:
+                unreadable.append(line)
+
+    total = len(lines)
+    parsed = len(items) + len(expenses)
+    confidence = round(parsed / total, 2) if total > 0 else 0.0
+
+    return {
+        "items": items,
+        "expenses": expenses,
+        "confidence": confidence,
+        "unreadable_sections": unreadable,
+    }
+
+
+def _parse_with_gemini(
+    raw_text: str,
+    context_type: Literal["inventory", "expense"],
+    known_items: list[str],
+) -> dict[str, Any]:
+    """Parse OCR text using Gemini Flash (free tier, 15 rpm)."""
+    import httpx
+
+    item_list = ", ".join(known_items[:50]) if known_items else "none"
 
     if context_type == "inventory":
-        system_prompt = (
-            "You are a restaurant inventory assistant. Extract items from the handwritten notebook image. "
-            f"Known catalog items: {item_list_str}. "
-            "Return JSON with keys: "
-            "items (array of {name, quantity, unit, date, cost_per_unit, notes}), "
-            "confidence (0.0-1.0), "
-            "unreadable_sections (array of strings describing illegible areas)."
+        prompt = (
+            "You are a restaurant inventory assistant. Extract items from this handwritten "
+            f"notebook text. Known catalog items: {item_list}. "
+            "Return JSON: {\"items\": [{\"name\", \"quantity\", \"unit\", \"cost_per_unit\", \"date\", \"notes\"}], "
+            "\"confidence\": 0.0-1.0, \"unreadable_sections\": []}.\n\n"
+            f"Text:\n{raw_text}"
         )
     else:
-        system_prompt = (
-            "You are a restaurant accounting assistant. Extract expense entries from the handwritten notebook image. "
-            "Return JSON with keys: "
-            "expenses (array of {description, amount, payee, date}), "
-            "confidence (0.0-1.0), "
-            "unreadable_sections (array of strings)."
+        prompt = (
+            "You are a restaurant accounting assistant. Extract expense entries from this text. "
+            "Return JSON: {\"expenses\": [{\"description\", \"amount\", \"payee\", \"date\"}], "
+            "\"confidence\": 0.0-1.0, \"unreadable_sections\": []}.\n\n"
+            f"Text:\n{raw_text}"
         )
 
-    # Encode image as base64 data URL
-    b64 = base64.b64encode(image_bytes).decode("utf-8")
-    image_url = f"data:image/jpeg;base64,{b64}"
-
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        response_format={"type": "json_object"},
-        temperature=0.1,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"Raw OCR text:\n{raw_text}\n\nPlease extract and structure the data from this image.",
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": image_url, "detail": "high"},
-                    },
-                ],
-            },
-        ],
+    response = httpx.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={settings.gemini_api_key}",
+        json={
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.1},
+        },
+        timeout=20,
     )
+    response.raise_for_status()
 
-    raw = response.choices[0].message.content or "{}"
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        logger.warning("parse_with_gpt4o: JSON decode failed (%s), returning empty result", exc)
-        return {"items": [], "expenses": [], "confidence": 0.0, "unreadable_sections": []}
+    body = response.json()
+    content = body["candidates"][0]["content"]["parts"][0]["text"]
+    parsed = json.loads(content)
+
+    # Ensure both keys present
+    parsed.setdefault("items", [])
+    parsed.setdefault("expenses", [])
+    parsed.setdefault("confidence", 0.5)
+    parsed.setdefault("unreadable_sections", [])
+    return parsed
 
 
-# ── Catalog matching ───────────────────────────────────────────────────────
+# ── Catalog matching ───────────────────────────────────────────────────────────
 
 async def match_to_catalog(
     extracted_items: list[dict[str, Any]],
     tenant_id: str,
 ) -> dict[str, Any]:
-    """Match extracted item names against the tenant's catalog.
+    """Match extracted item names to the tenant's catalog.
 
-    - Exact match (case-insensitive) → match_type='exact', match_confidence=1.0
-    - No exact match → fuzzy match via GPT-4o-mini
-      - confidence > 0.85 → matched list
-      - confidence ≤ 0.85 → unmatched list
-
-    Returns:
-        {
-            matched: [{...original item..., catalog_name, catalog_id, match_type, match_confidence}],
-            unmatched: [{...original item..., reason}],
-        }
+    - Exact match (case-insensitive) → match_type='exact', confidence=1.0
+    - rapidfuzz WRatio ≥ 85 → match_type='fuzzy'
+    - Below threshold → unmatched
     """
     catalog_names: list[str] = []
     try:
@@ -162,10 +222,8 @@ async def match_to_catalog(
         logger.warning("Could not fetch catalog for tenant %s: %s", tenant_id, exc)
 
     catalog_lower = {name.lower(): name for name in catalog_names}
-
     matched: list[dict[str, Any]] = []
     unmatched: list[dict[str, Any]] = []
-    needs_fuzzy: list[dict[str, Any]] = []
 
     for item in extracted_items:
         name = (item.get("name") or "").strip()
@@ -180,79 +238,41 @@ async def match_to_catalog(
                 "match_type": "exact",
                 "match_confidence": 1.0,
             })
-        else:
-            needs_fuzzy.append(item)
+            continue
 
-    if needs_fuzzy and catalog_names:
-        fuzzy_results = await _fuzzy_match_batch(needs_fuzzy, catalog_names)
-        for item, fuzzy in zip(needs_fuzzy, fuzzy_results):
-            if fuzzy["confidence"] > 0.85:
+        if catalog_names:
+            best_name, score = _fuzzy_best(name, catalog_names)
+            if score >= 85:
                 matched.append({
                     **item,
-                    "catalog_name": fuzzy["match"],
+                    "catalog_name": best_name,
                     "match_type": "fuzzy",
-                    "match_confidence": fuzzy["confidence"],
+                    "match_confidence": round(score / 100, 2),
                 })
-            else:
-                unmatched.append({
-                    **item,
-                    "reason": f"no catalog match (best: {fuzzy['match']!r}, confidence={fuzzy['confidence']:.2f})",
-                })
-    else:
-        for item in needs_fuzzy:
-            unmatched.append({**item, "reason": "no catalog available or no match found"})
+                continue
+            unmatched.append({
+                **item,
+                "reason": f"no catalog match (best: {best_name!r}, score={score})",
+            })
+        else:
+            unmatched.append({**item, "reason": "catalog unavailable"})
 
     return {"matched": matched, "unmatched": unmatched}
 
 
-async def _fuzzy_match_batch(
-    items: list[dict[str, Any]],
-    catalog_names: list[str],
-) -> list[dict[str, Any]]:
-    """Use GPT-4o-mini to fuzzy-match item names to catalog names.
-
-    Returns one result per item: {match: str, confidence: float}
-    """
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.openai_api_key)
-
-    item_names = [item.get("name", "") for item in items]
-    catalog_str = json.dumps(catalog_names[:200])  # cap to avoid token overflow
-
-    prompt = (
-        "Match each extracted item name to the closest catalog item. "
-        "Return JSON: {matches: [{extracted, match, confidence}]} "
-        "where confidence is 0.0-1.0 (1.0=perfect, 0.0=no match). "
-        "If no reasonable match exists, use confidence=0.0 and match=null.\n\n"
-        f"Catalog: {catalog_str}\n\n"
-        f"Items to match: {json.dumps(item_names)}"
-    )
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        response_format={"type": "json_object"},
-        temperature=0,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    raw = response.choices[0].message.content or "{}"
+def _fuzzy_best(query: str, choices: list[str]) -> tuple[str, float]:
+    """Return the best fuzzy match using rapidfuzz WRatio."""
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        logger.warning("_fuzzy_match_batch: JSON decode failed (%s), treating all as unmatched", exc)
-        data = {}
-    results = data.get("matches", [])
-
-    # Normalize output
-    out: list[dict[str, Any]] = []
-    for i, item in enumerate(items):
-        if i < len(results):
-            r = results[i]
-            out.append({
-                "match": r.get("match") or "",
-                "confidence": float(r.get("confidence", 0.0)),
-            })
-        else:
-            out.append({"match": "", "confidence": 0.0})
-    return out
+        from rapidfuzz import process as rfp, fuzz
+        result = rfp.extractOne(query, choices, scorer=fuzz.WRatio)
+        if result:
+            return result[0], result[1]
+    except ImportError:
+        # Fallback: difflib
+        from difflib import get_close_matches, SequenceMatcher
+        matches = get_close_matches(query.lower(), [c.lower() for c in choices], n=1, cutoff=0.6)
+        if matches:
+            idx = [c.lower() for c in choices].index(matches[0])
+            ratio = SequenceMatcher(None, query.lower(), matches[0]).ratio() * 100
+            return choices[idx], ratio
+    return choices[0] if choices else "", 0.0
