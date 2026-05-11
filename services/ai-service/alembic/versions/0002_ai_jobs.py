@@ -65,8 +65,15 @@ def upgrade() -> None:
     # Enable RLS
     op.execute("""
         ALTER TABLE ai_jobs ENABLE ROW LEVEL SECURITY;
-        CREATE POLICY tenant_isolation ON ai_jobs
-            USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::UUID);
+        DO $$ BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_policies
+                WHERE tablename = 'ai_jobs' AND policyname = 'tenant_isolation'
+            ) THEN
+                CREATE POLICY tenant_isolation ON ai_jobs
+                    USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::UUID);
+            END IF;
+        END $$;
     """)
 
     # Audit trigger
