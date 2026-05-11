@@ -24,7 +24,7 @@ spring:
         format_sql: false
         default_schema: public
   flyway:
-    enabled: false
+    enabled: true
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}

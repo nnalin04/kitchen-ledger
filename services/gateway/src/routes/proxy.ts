@@ -31,7 +31,7 @@ const SERVICE_PREFIXES: Array<{ prefix: string; upstream: string; rewritePrefix?
   { prefix: '/api/ai',            upstream: config.AI_SERVICE_URL },
   { prefix: '/api/files',         upstream: config.FILE_SERVICE_URL },
   { prefix: '/api/notifications', upstream: config.NOTIFICATION_SERVICE_URL },
-  { prefix: '/api/reports',       upstream: config.REPORT_SERVICE_URL },
+  { prefix: '/api/reports',       upstream: config.REPORT_SERVICE_URL,   rewritePrefix: '/api/v1/reports' },
 ];
 
 // ── Hop-by-hop headers (must not be forwarded) ────────────────────────────────

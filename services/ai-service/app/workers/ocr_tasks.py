@@ -134,7 +134,6 @@ def process_notebook_ocr(
         elapsed_ms = int(time.time() * 1000) - start_ms
         result = {
             "context_type": context_type,
-            "raw_text": raw_text,
             "parsed": parsed,
             "catalog_match": match_result,
             "confidence": parsed.get("confidence", 0.0),

@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     new_data     JSONB,
     changed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     ip_address   TEXT,
-    session_user TEXT        DEFAULT current_user
+    db_user      TEXT        DEFAULT current_user
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_time
