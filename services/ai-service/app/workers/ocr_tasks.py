@@ -110,7 +110,7 @@ def process_notebook_ocr(
         image_bytes = _download_file(file_url)
 
         # 2. Preprocess for OCR
-        from app.services.ocr_service import preprocess_image, extract_text, parse_with_gpt4o, match_to_catalog
+        from app.services.ocr_service import preprocess_image, extract_text, parse_ocr_text, match_to_catalog
         processed = preprocess_image(image_bytes)
 
         # 3. Google Vision OCR
@@ -124,8 +124,8 @@ def process_notebook_ocr(
         except Exception as e:
             logger.warning("Could not fetch catalog: %s", e)
 
-        # 5. GPT-4o parse
-        parsed = parse_with_gpt4o(raw_text, processed, context_type, known_items)
+        # 5. Parse OCR text (Gemini Flash if configured, else regex)
+        parsed = parse_ocr_text(raw_text, context_type, known_items)
 
         # 6. Match to catalog (only for inventory)
         if context_type == "inventory":
@@ -143,7 +143,8 @@ def process_notebook_ocr(
             "confidence": parsed.get("confidence", 0.0),
         }
 
-        _mark_completed(db, job, result, model_used="gpt-4o", processing_ms=elapsed_ms)
+        model = "gemini-1.5-flash+vision" if settings.gemini_api_key else "vision+regex"
+        _mark_completed(db, job, result, model_used=model, processing_ms=elapsed_ms)
 
         publish_event(
             "ai.ocr.completed",
@@ -231,7 +232,8 @@ def process_receipt_ocr(self, job_id: str, file_url: str, tenant_id: str):
             "price_discrepancies": discrepancies,
         }
 
-        _mark_completed(db, job, result, model_used="mindee/receipt-v5", processing_ms=elapsed_ms)
+        receipt_model = "gemini-1.5-flash+vision" if settings.gemini_api_key else "vision+regex"
+        _mark_completed(db, job, result, model_used=receipt_model, processing_ms=elapsed_ms)
 
         publish_event(
             "ai.ocr.completed",
