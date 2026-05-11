@@ -283,7 +283,8 @@ services:
     environment:
       <<: *python-env
       PORT: 8084
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SARVAM_API_KEY: ${SARVAM_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GOOGLE_CLOUD_CREDENTIALS: ${GOOGLE_CLOUD_CREDENTIALS:-}
       MINDEE_API_KEY: ${MINDEE_API_KEY:-}
       INVENTORY_SERVICE_URL: http://inventory-service:8082
@@ -315,7 +316,8 @@ services:
     command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1
     environment:
       <<: *python-env
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SARVAM_API_KEY: ${SARVAM_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GOOGLE_CLOUD_CREDENTIALS: ${GOOGLE_CLOUD_CREDENTIALS:-}
       MINDEE_API_KEY: ${MINDEE_API_KEY:-}
       INVENTORY_SERVICE_URL: http://inventory-service:8082
