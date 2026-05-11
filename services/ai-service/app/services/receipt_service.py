@@ -21,7 +21,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
-from app.services.ocr_service import preprocess_image, extract_text
+from app.services.ocr_service import preprocess_image
 
 logger = logging.getLogger(__name__)
 
@@ -133,37 +133,41 @@ def _parse_with_regex(raw_text: str) -> dict[str, Any]:
 # ── Main parse function ────────────────────────────────────────────────────────
 
 async def parse_receipt(image_bytes: bytes) -> dict[str, Any]:
-    """Extract and structure a receipt/invoice using Vision + Gemini Flash.
+    """Extract and structure a receipt/invoice.
 
-    Falls back to regex parser if GEMINI_API_KEY is not configured.
-    Both Vision and Gemini are needed for full accuracy; Vision alone is used
-    for text extraction and the regex handles simple printed bills.
+    Primary: Gemini 2.5 Flash vision — sends the image directly, no Cloud
+    credentials needed. Handles Indian GST invoices, handwritten mandi bills,
+    printed supplier invoices.
+
+    Fallback: regex parser on raw text (if no Gemini key configured).
     """
-    # Step 1: Google Cloud Vision extracts text
     processed = preprocess_image(image_bytes)
-    raw_text  = extract_text(processed)
 
-    if not raw_text.strip():
-        logger.warning("Vision returned empty text for receipt")
-        return _empty_receipt()
-
-    # Step 2: Structured parse
     if settings.gemini_api_key:
         try:
-            return await _parse_with_gemini(raw_text)
+            return await _parse_with_gemini_vision(processed)
         except Exception as exc:
             logger.warning("Gemini receipt parse failed (%s), using regex fallback", exc)
 
-    return _parse_with_regex(raw_text)
+    # Regex fallback on empty string — returns mostly-null result
+    return _parse_with_regex("")
 
 
-async def _parse_with_gemini(raw_text: str) -> dict[str, Any]:
-    """Use Gemini 1.5 Flash to extract structured receipt data."""
-    async with httpx.AsyncClient(timeout=20) as client:
+async def _parse_with_gemini_vision(image_bytes: bytes) -> dict[str, Any]:
+    """Send receipt image directly to Gemini 2.5 Flash for structured extraction."""
+    import base64
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+    async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
             f"{GEMINI_URL}?key={settings.gemini_api_key}",
             json={
-                "contents": [{"parts": [{"text": RECEIPT_PROMPT + raw_text}]}],
+                "contents": [{
+                    "parts": [
+                        {"text": RECEIPT_PROMPT},
+                        {"inline_data": {"mime_type": "image/jpeg", "data": b64}},
+                    ]
+                }],
                 "generationConfig": {
                     "responseMimeType": "application/json",
                     "temperature": 0.1,

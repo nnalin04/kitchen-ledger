@@ -110,13 +110,10 @@ def process_notebook_ocr(
         image_bytes = _download_file(file_url)
 
         # 2. Preprocess for OCR
-        from app.services.ocr_service import preprocess_image, extract_text, parse_ocr_text, match_to_catalog
+        from app.services.ocr_service import preprocess_image, parse_ocr_text, match_to_catalog
         processed = preprocess_image(image_bytes)
 
-        # 3. Google Vision OCR
-        raw_text = extract_text(processed)
-
-        # 4. Fetch tenant item catalog
+        # 3. Fetch tenant item catalog
         from app.clients.inventory_client import get_item_names
         known_items: list[str] = []
         try:
@@ -124,8 +121,8 @@ def process_notebook_ocr(
         except Exception as e:
             logger.warning("Could not fetch catalog: %s", e)
 
-        # 5. Parse OCR text (Gemini Flash if configured, else regex)
-        parsed = parse_ocr_text(raw_text, context_type, known_items)
+        # 4. Gemini 2.5 Flash vision parse (image sent directly — no Vision API needed)
+        parsed = parse_ocr_text("", context_type, known_items, image_bytes=processed)
 
         # 6. Match to catalog (only for inventory)
         if context_type == "inventory":
