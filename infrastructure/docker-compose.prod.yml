@@ -318,8 +318,6 @@ services:
       <<: *python-env
       SARVAM_API_KEY: ${SARVAM_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GOOGLE_CLOUD_CREDENTIALS: ${GOOGLE_CLOUD_CREDENTIALS:-}
-      MINDEE_API_KEY: ${MINDEE_API_KEY:-}
       INVENTORY_SERVICE_URL: http://inventory-service:8082
       FINANCE_SERVICE_URL: http://finance-service:8083
       INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
@@ -328,6 +326,12 @@ services:
         condition: service_healthy
       rabbitmq-setup:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping --timeout=5 -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
     restart: unless-stopped
     deploy:
       resources:
