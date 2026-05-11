@@ -27,11 +27,10 @@ logger = logging.getLogger(__name__)
 
 PRICE_DISCREPANCY_THRESHOLD = 0.05
 
-# Gemini Flash free tier: 15 RPM, 1M tokens/day
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models"
-    "/gemini-1.5-flash:generateContent"
-)
+# Gemini 2.5 Flash — free tier: 10 RPM / 500 RPD, supports vision + JSON output
+# Docs: https://ai.google.dev/gemini-api/docs/models
+GEMINI_MODEL   = "gemini-2.5-flash"
+GEMINI_URL     = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 RECEIPT_PROMPT = """You are a restaurant accounting assistant specialising in Indian GST invoices and supplier bills.
 

@@ -143,7 +143,7 @@ def process_notebook_ocr(
             "confidence": parsed.get("confidence", 0.0),
         }
 
-        model = "gemini-1.5-flash+vision" if settings.gemini_api_key else "vision+regex"
+        model = "gemini-2.5-flash+vision" if settings.gemini_api_key else "vision+regex"
         _mark_completed(db, job, result, model_used=model, processing_ms=elapsed_ms)
 
         publish_event(
@@ -232,7 +232,7 @@ def process_receipt_ocr(self, job_id: str, file_url: str, tenant_id: str):
             "price_discrepancies": discrepancies,
         }
 
-        receipt_model = "gemini-1.5-flash+vision" if settings.gemini_api_key else "vision+regex"
+        receipt_model = "gemini-2.5-flash+vision" if settings.gemini_api_key else "vision+regex"
         _mark_completed(db, job, result, model_used=receipt_model, processing_ms=elapsed_ms)
 
         publish_event(
