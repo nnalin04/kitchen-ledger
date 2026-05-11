@@ -39,7 +39,7 @@ def upgrade() -> None:
             END IF;
         END $$;
 
-        CREATE INDEX idx_report_jobs_tenant
+        CREATE INDEX IF NOT EXISTS idx_report_jobs_tenant
             ON report_jobs (tenant_id, created_at DESC);
     """)
 
