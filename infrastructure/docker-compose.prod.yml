@@ -1,0 +1,435 @@
+version: "3.9"
+
+# Production compose for Oracle Cloud ARM VM (80.225.223.142)
+# Run: docker compose -f infrastructure/docker-compose.prod.yml up -d --build
+# Postgres runs locally in Docker. Redis + RabbitMQ also local.
+# Supabase is used only for file/object storage (file-service, report-service).
+
+x-spring-env: &spring-env
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/kitchenledger
+  SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-kl_user}
+  SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_DATA_REDIS_PORT: 6379
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_USERNAME: ${RABBITMQ_USER:-kl_rabbit}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+  RABBITMQ_PORT: 5672
+  JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+
+x-python-env: &python-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-kl_user}:${POSTGRES_PASSWORD}@postgres:5432/kitchenledger
+  REDIS_URL: redis://redis:6379
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:-kl_rabbit}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+
+services:
+  # ─────────────────────────────────────────────
+  # INFRASTRUCTURE
+  # ─────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: kitchenledger
+      POSTGRES_USER: ${POSTGRES_USER:-kl_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kl_user} -d kitchenledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 320M
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    # Management UI accessible only via SSH tunnel: ssh -L 15672:localhost:15672 ubuntu@80.225.223.142
+    ports:
+      - "127.0.0.1:15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-kl_rabbit}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  rabbitmq-setup:
+    image: curlimages/curl:8.8.0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./rabbitmq/setup.sh:/setup.sh:ro
+    entrypoint: ["sh", "/setup.sh"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 15672
+      RABBITMQ_USER: ${RABBITMQ_USER:-kl_rabbit}
+      RABBITMQ_PASS: ${RABBITMQ_PASSWORD}
+    restart: "no"
+
+  # ─────────────────────────────────────────────
+  # SERVICE 1: API GATEWAY
+  # ─────────────────────────────────────────────
+
+  gateway:
+    build:
+      context: ../services/gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      AUTH_SERVICE_URL: http://auth-service:8081
+      INVENTORY_SERVICE_URL: http://inventory-service:8082
+      FINANCE_SERVICE_URL: http://finance-service:8083
+      STAFF_SERVICE_URL: http://staff-service:8088
+      AI_SERVICE_URL: http://ai-service:8084
+      FILE_SERVICE_URL: http://file-service:8085
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
+      REPORT_SERVICE_URL: http://report-service:8087
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      REDIS_URL: redis://redis:6379
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ─────────────────────────────────────────────
+  # SERVICE 2: AUTH SERVICE
+  # ─────────────────────────────────────────────
+
+  auth-service:
+    build:
+      context: ../services/auth-service
+      dockerfile: Dockerfile
+    environment:
+      <<: *spring-env
+      SERVER_PORT: 8081
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      JWT_ACCESS_TOKEN_EXPIRY_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRY_MINUTES:-15}
+      JWT_REFRESH_TOKEN_EXPIRY_DAYS: ${JWT_REFRESH_TOKEN_EXPIRY_DAYS:-30}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 640M
+
+  # ─────────────────────────────────────────────
+  # SERVICE 3: INVENTORY SERVICE
+  # ─────────────────────────────────────────────
+
+  inventory-service:
+    build:
+      context: ../services/inventory-service
+      dockerfile: Dockerfile
+    environment:
+      <<: *spring-env
+      SERVER_PORT: 8082
+      AUTH_SERVICE_URL: http://auth-service:8081
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 640M
+
+  # ─────────────────────────────────────────────
+  # SERVICE 4: FINANCE SERVICE
+  # ─────────────────────────────────────────────
+
+  finance-service:
+    build:
+      context: ../services/finance-service
+      dockerfile: Dockerfile
+    environment:
+      <<: *spring-env
+      SERVER_PORT: 8083
+      INVENTORY_SERVICE_URL: http://inventory-service:8082
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 640M
+
+  # ─────────────────────────────────────────────
+  # SERVICE 5: STAFF SERVICE
+  # ─────────────────────────────────────────────
+
+  staff-service:
+    build:
+      context: ../services/staff-service
+      dockerfile: Dockerfile
+    environment:
+      <<: *spring-env
+      SERVER_PORT: 8088
+      AUTH_SERVICE_URL: http://auth-service:8081
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8088/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 640M
+
+  # ─────────────────────────────────────────────
+  # SERVICE 6: AI SERVICE
+  # ─────────────────────────────────────────────
+
+  ai-service:
+    build:
+      context: ../services/ai-service
+      dockerfile: Dockerfile
+    environment:
+      <<: *python-env
+      PORT: 8084
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GOOGLE_CLOUD_CREDENTIALS: ${GOOGLE_CLOUD_CREDENTIALS:-}
+      MINDEE_API_KEY: ${MINDEE_API_KEY:-}
+      INVENTORY_SERVICE_URL: http://inventory-service:8082
+      FINANCE_SERVICE_URL: http://finance-service:8083
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8084/ready')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  ai-worker:
+    build:
+      context: ../services/ai-service
+      dockerfile: Dockerfile
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=1
+    environment:
+      <<: *python-env
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GOOGLE_CLOUD_CREDENTIALS: ${GOOGLE_CLOUD_CREDENTIALS:-}
+      MINDEE_API_KEY: ${MINDEE_API_KEY:-}
+      INVENTORY_SERVICE_URL: http://inventory-service:8082
+      FINANCE_SERVICE_URL: http://finance-service:8083
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ─────────────────────────────────────────────
+  # SERVICE 7: NOTIFICATION SERVICE
+  # ─────────────────────────────────────────────
+
+  notification-service:
+    build:
+      context: ../services/notification-service
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 8086
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kl_user}:${POSTGRES_PASSWORD}@postgres:5432/kitchenledger
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-kl_rabbit}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8086/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ─────────────────────────────────────────────
+  # SERVICE 8: REPORT SERVICE
+  # ─────────────────────────────────────────────
+
+  report-service:
+    build:
+      context: ../services/report-service
+      dockerfile: Dockerfile
+    environment:
+      <<: *python-env
+      PORT: 8087
+      FINANCE_SERVICE_URL: http://finance-service:8083
+      INVENTORY_SERVICE_URL: http://inventory-service:8082
+      SUPABASE_STORAGE_URL: ${SUPABASE_STORAGE_URL:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8087/ready')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ─────────────────────────────────────────────
+  # SERVICE 9: FILE SERVICE
+  # ─────────────────────────────────────────────
+
+  file-service:
+    build:
+      context: ../services/file-service
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 8085
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kl_user}:${POSTGRES_PASSWORD}@postgres:5432/kitchenledger
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-kitchenledger-files}
+      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-10}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8085/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
